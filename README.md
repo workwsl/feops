@@ -1,4 +1,4 @@
-# @wangxyu/feops
+# @wangxyu/feops [GitHub](https://github.com/workwsl/feops)
 
 前端运维工具集 - 基于 Node.js 实现的前端运维工具，主要用于批量管理和同步前端仓库。
 
