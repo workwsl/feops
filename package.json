@@ -1,0 +1,47 @@
+{
+  "name": "@wangxyu/feops",
+  "version": "1.0.0",
+  "description": "前端运维工具集 - 基于 Node.js 实现的前端运维工具，支持 GitLab API 集成和自动更新",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "feops": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "git",
+    "clone",
+    "batch",
+    "cli",
+    "tools",
+    "repository",
+    "automation"
+  ],
+  "author": "flow",
+  "license": "ISC",
+  "preferGlobal": true,
+  "devDependencies": {
+    "@types/inquirer": "^9.0.9",
+    "@types/node": "^24.9.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "chalk": "^4.1.2",
+    "cli-table3": "^0.6.5",
+    "commander": "^14.0.2",
+    "inquirer": "^12.10.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
+
