@@ -1,0 +1,97 @@
+# Git 提交规范
+
+## Commit 消息格式
+
+遵循 Conventional Commits 规范：
+
+```
+<type>(<scope>): <subject>
+
+<body>
+
+<footer>
+```
+
+## 提交类型
+
+- `feat`: 新功能
+- `fix`: 修复 bug
+- `docs`: 文档更新
+- `style`: 代码格式（不影响代码运行）
+- `refactor`: 重构
+- `perf`: 性能优化
+- `test`: 测试相关
+- `chore`: 构建过程或辅助工具变动
+- `revert`: 回滚
+- `build`: 构建系统变动
+- `ci`: CI 配置变动
+
+## 提交流程
+
+### 推荐方式：使用 Commitizen
+
+```bash
+# 1. 添加文件到暂存区
+git add .
+
+# 2. 使用 commitizen 交互式提交
+npm run commit
+
+# 3. 按照提示选择类型、填写信息
+# 4. 自动执行代码检查（ESLint + Prettier + TypeScript）
+# 5. 自动验证提交消息格式
+```
+
+### 手动提交
+
+```bash
+git add .
+git commit -m "feat(user): 添加用户登录功能"
+```
+
+## Git Hooks
+
+### pre-commit
+
+提交前自动执行：
+
+- ESLint 自动修复
+- Prettier 格式化
+- TypeScript 类型检查
+
+### commit-msg
+
+提交时自动验证消息格式是否符合 Conventional Commits 规范。
+
+## 生成 CHANGELOG
+
+```bash
+# 自动升级版本、生成 CHANGELOG、创建 tag
+npm run changelog
+
+# 首次发布
+npm run changelog -- --first-release
+```
+
+## 示例
+
+```bash
+# 新功能
+git commit -m "feat(user): 添加用户登录功能"
+
+# 修复 bug
+git commit -m "fix(api): 修复用户信息接口返回错误"
+
+# 文档更新
+git commit -m "docs: 更新 README 安装说明"
+
+# 重构
+git commit -m "refactor(store): 优化用户状态管理"
+
+# 性能优化
+git commit -m "perf(list): 优化列表渲染性能"
+```
+
+## 详细文档
+
+完整的 Git 提交规范请查看：[docs/GIT_COMMIT_GUIDE.md](mdc:docs/GIT_COMMIT_GUIDE.md)

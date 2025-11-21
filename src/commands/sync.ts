@@ -3,6 +3,7 @@ import chalk from 'chalk';
 import * as fs from 'fs';
 import * as path from 'path';
 import { spawn } from 'child_process';
+import Table from 'cli-table3';
 import { loadConfig, loadBlacklist, configExists } from '../config';
 import { GitLabService, Repository } from '../services/gitlab';
 
@@ -13,6 +14,7 @@ interface CloneOrUpdateResult {
   error?: string;
   duration: number;
   path: string;
+  branch?: string;
 }
 
 interface CloneOrUpdateOptions {
@@ -150,6 +152,67 @@ function isGitRepository(dirPath: string): boolean {
 }
 
 /**
+ * 检查仓库是否有未提交的更改
+ */
+async function hasUncommittedChanges(repoPath: string): Promise<boolean> {
+  try {
+    // 检查工作区是否有未提交的更改
+    const statusResult = await executeGitCommandWithOutput(['status', '--porcelain'], repoPath);
+    return statusResult.trim().length > 0;
+  } catch (error) {
+    // 如果命令执行失败，假设有未提交的更改，避免误操作
+    return true;
+  }
+}
+
+/**
+ * 获取当前分支名
+ */
+async function getCurrentBranch(repoPath: string): Promise<string> {
+  try {
+    const branchResult = await executeGitCommandWithOutput(['rev-parse', '--abbrev-ref', 'HEAD'], repoPath);
+    return branchResult.trim();
+  } catch (error) {
+    return 'unknown';
+  }
+}
+
+/**
+ * 执行 Git 命令并返回输出
+ */
+function executeGitCommandWithOutput(args: string[], cwd?: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const git = spawn('git', args, {
+      cwd: cwd || process.cwd(),
+      stdio: 'pipe'
+    });
+    
+    let stdout = '';
+    let stderr = '';
+    
+    git.stdout?.on('data', (data) => {
+      stdout += data.toString();
+    });
+    
+    git.stderr?.on('data', (data) => {
+      stderr += data.toString();
+    });
+    
+    git.on('close', (code) => {
+      if (code === 0) {
+        resolve(stdout);
+      } else {
+        reject(new Error(`Git command failed: ${args.join(' ')}\n${stderr}`));
+      }
+    });
+    
+    git.on('error', (error) => {
+      reject(error);
+    });
+  });
+}
+
+/**
  * 并发处理仓库
  */
 async function processRepositoriesInParallel(
@@ -198,12 +261,33 @@ async function processRepository(repo: any, options: CloneOrUpdateOptions): Prom
       
     } else if (repo.isGitRepo) {
       // 更新已存在的仓库
-      console.log(chalk.blue(`🔄 更新仓库 fetch: ${repo.name}`));
+      const targetBranch = options.branch || 'master';
+      
+      // 检查是否有未提交的更改
+      const hasUncommitted = await hasUncommittedChanges(repo.localPath);
+      if (hasUncommitted) {
+        const duration = Date.now() - startTime;
+        const skipMsg = `存在未提交的更改，跳过更新`;
+        const currentBranch = await getCurrentBranch(repo.localPath);
+        console.log(chalk.yellow(`⏭️  跳过: ${repo.name} - ${skipMsg}`));
+        
+        return {
+          name: repo.name,
+          action: 'skipped',
+          success: true,
+          error: skipMsg,
+          duration,
+          path: repo.localPath,
+          branch: currentBranch
+        };
+      }
+      
+      console.log(chalk.blue(`🔄 更新仓库: ${repo.name}`));
       // git fetch 所有远程分支
       await executeGitCommand(['fetch', '--all'], repo.localPath);
 
       // 切换到指定分支
-      await executeGitCommand(['checkout', options.branch || 'master'], repo.localPath);
+      await executeGitCommand(['checkout', targetBranch], repo.localPath);
       
       // 执行 git pull
       await executeGitCommand(['pull'], repo.localPath);
@@ -294,14 +378,48 @@ function showResults(results: CloneOrUpdateResult[]): void {
   
   const cloned = results.filter(r => r.action === 'cloned' && r.success);
   const updated = results.filter(r => r.action === 'updated' && r.success);
+  const skipped = results.filter(r => r.action === 'skipped');
   const errors = results.filter(r => !r.success);
   
   console.log(chalk.green(`✅ 克隆成功: ${cloned.length} 个`));
   console.log(chalk.blue(`🔄 更新成功: ${updated.length} 个`));
+  if (skipped.length > 0) {
+    console.log(chalk.yellow(`⏭️  跳过: ${skipped.length} 个`));
+  }
   console.log(chalk.red(`❌ 失败: ${errors.length} 个`));
   
+  // 显示被跳过的仓库（有未提交更改的）
+  if (skipped.length > 0) {
+    console.log(chalk.yellow('\n⏭️  跳过的仓库（存在未提交的更改）:'));
+    const skippedTable = new Table({
+      head: [
+        chalk.cyan('序号'),
+        chalk.cyan('仓库名称'),
+        chalk.cyan('分支名'),
+        chalk.cyan('原因')
+      ],
+      style: {
+        head: [],
+        border: ['grey']
+      },
+      colWidths: [6, 25, 20, 30]
+    });
+    
+    skipped.forEach((result, index) => {
+      skippedTable.push([
+        index + 1,
+        result.name,
+        result.branch || 'unknown',
+        result.error || '存在未提交的更改'
+      ]);
+    });
+    
+    console.log(skippedTable.toString());
+  }
+  
+  // 显示失败的仓库
   if (errors.length > 0) {
-    console.log(chalk.red('\n失败的仓库:'));
+    console.log(chalk.red('\n❌ 失败的仓库:'));
     errors.forEach(result => {
       console.log(chalk.red(`  - ${result.name}: ${result.error}`));
     });

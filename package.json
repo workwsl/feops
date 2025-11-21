@@ -1,6 +1,6 @@
 {
   "name": "@wangxyu/feops",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "前端运维工具集 - 基于 Node.js 实现的前端运维工具，支持 GitLab API 集成和自动更新",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
