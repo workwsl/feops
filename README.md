@@ -458,6 +458,15 @@ feops upgrade --help
 
 详细的更新日志请查看 [CHANGELOG.md](./CHANGELOG.md)
 
+### v1.1.0 (2026-05-26)
+
+#### 新增
+- ✨ 支持多 Group 独立本地目录配置
+- ✨ `sync` / `branch` / `merged` / `uptodate` 新增 `--group` 选项
+
+#### 改进
+- 🔄 旧配置兼容：未设置 `group.directory` 时仍使用 `defaults.directory`
+
 ### v1.0.1 (2025-11-21)
 
 #### 新增

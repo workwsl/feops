@@ -5,6 +5,19 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.1.0] - 2026-05-26
+
+### 新增
+- ✨ 支持多 Group 独立本地目录配置（`group.directory`）
+- ✨ `sync` 命令：按 Group 目录分别克隆/更新，新增 `--group` 选项
+- ✨ `branch` / `merged` / `uptodate` 命令：未指定 `-d` 时自动扫描所有 Group 目录，新增 `--group` 选项
+- ✨ `init` / `config add-group`：支持为每个 Group 配置本地目录
+- ✨ 新增多 Group 目录验证测试脚本（`npm test`）
+
+### 改进
+- 🔄 `config list`：显示 Group 与本地目录映射
+- 🔄 旧配置兼容：未设置 `group.directory` 时仍使用 `defaults.directory`
+
 ## [1.0.1] - 2025-11-21
 
 ### 新增
