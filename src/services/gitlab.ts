@@ -1,7 +1,7 @@
 import * as https from 'https';
 import * as http from 'http';
 import { URL } from 'url';
-import { loadConfig } from '../config';
+import { loadConfig, GitLabGroup } from '../config';
 
 /**
  * GitLab 项目接口
@@ -31,6 +31,12 @@ export interface Repository {
   full_name: string;
   visibility: string;
   archived: boolean;
+  group_path: string;
+}
+
+export interface GroupProjects {
+  group: GitLabGroup;
+  repos: Repository[];
 }
 
 /**
@@ -142,27 +148,35 @@ export class GitLabService {
     }
 
     // 转换为 Repository 格式
-    return allProjects.map(project => this.convertToRepository(project));
+    return allProjects.map(project => this.convertToRepository(project, groupPath));
   }
 
   /**
-   * 获取配置中所有 Group 的项目
+   * 按 Group 获取配置中的项目
    */
-  async fetchAllConfiguredProjects(): Promise<Repository[]> {
+  async fetchProjectsByGroup(groupPath?: string): Promise<GroupProjects[]> {
     const config = loadConfig();
-    const allRepositories: Repository[] = [];
+    const groups = groupPath
+      ? config.gitlab.groups.filter(g => g.path === groupPath)
+      : config.gitlab.groups;
+
+    if (groupPath && groups.length === 0) {
+      throw new Error(`Group "${groupPath}" 未在配置中找到`);
+    }
+
+    const results: GroupProjects[] = [];
     const errors: string[] = [];
 
-    for (const group of config.gitlab.groups) {
+    for (const group of groups) {
       try {
         const repos = await this.fetchProjects(group.path);
-        allRepositories.push(...repos);
+        results.push({ group, repos });
       } catch (error) {
         errors.push(`Group "${group.path}": ${error instanceof Error ? error.message : String(error)}`);
       }
     }
 
-    if (errors.length > 0 && allRepositories.length === 0) {
+    if (errors.length > 0 && results.length === 0) {
       throw new Error(`获取所有 Group 的项目都失败了:\n${errors.join('\n')}`);
     }
 
@@ -170,9 +184,19 @@ export class GitLabService {
       console.warn(`部分 Group 获取失败:\n${errors.join('\n')}`);
     }
 
-    // 去重 (根据 id)
+    return results;
+  }
+
+  /**
+   * 获取配置中所有 Group 的项目
+   */
+  async fetchAllConfiguredProjects(): Promise<Repository[]> {
+    const groupProjects = await this.fetchProjectsByGroup();
+    const allRepositories = groupProjects.flatMap(item => item.repos);
+
+    // 按 full_name 去重，避免同一项目出现在多个 group 时重复
     const uniqueRepos = Array.from(
-      new Map(allRepositories.map(repo => [repo.id, repo])).values()
+      new Map(allRepositories.map(repo => [repo.full_name, repo])).values()
     );
 
     return uniqueRepos;
@@ -196,7 +220,7 @@ export class GitLabService {
   /**
    * 转换 GitLab 项目为 Repository 格式
    */
-  private convertToRepository(project: GitLabProject): Repository {
+  private convertToRepository(project: GitLabProject, groupPath: string): Repository {
     // 从 http_url_to_repo 中提取 relative_path
     // 例如: http://gitcode.tongdao.cn/dev51/fe-xh/fe-xxrlwx2c-mp.git
     // 提取: /dev51/fe-xh/fe-xxrlwx2c-mp
@@ -212,7 +236,8 @@ export class GitLabService {
       relative_path: relativePath,
       full_name: project.path_with_namespace,
       visibility: project.visibility,
-      archived: project.archived
+      archived: project.archived,
+      group_path: groupPath
     };
   }
 }

@@ -7,6 +7,7 @@ import * as os from 'os';
  */
 export interface GitLabGroup {
   path: string;
+  directory?: string;
   description?: string;
 }
 

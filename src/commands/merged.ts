@@ -1,11 +1,10 @@
 import { Command } from 'commander';
-import * as fs from 'fs';
-import * as path from 'path';
 import chalk from 'chalk';
 import { execSync } from 'child_process';
 import Table from 'cli-table3';
 import { createProgressBar } from '../utils/progressBar';
 import { configExists, loadConfig } from '../config';
+import { resolveScanDirectories, scanAllGitProjects } from '../utils/directories';
 
 interface MergeCheckResult {
   name: string;
@@ -22,7 +21,8 @@ interface MergeCheckResult {
 export const mergedCommand = new Command('merged')
   .description('检查指定分支是否已经合并到master分支（分支→master）')
   .argument('<branch>', '要检查的分支名称')
-  .option('-d, --directory <dir>', '项目目录（覆盖配置文件中的默认值）')
+  .option('-d, --directory <dir>', '项目目录（覆盖所有 group 目录，仅扫描指定目录）')
+  .option('-g, --group <path>', '仅扫描指定 GitLab Group 的目录')
   .option('--no-fetch', '跳过 git fetch 操作')
   .option('--format <type>', '输出格式 (table|json|simple)', 'table')
   .option('-p, --parallel <number>', '并发处理数量', '5')
@@ -40,26 +40,27 @@ export const mergedCommand = new Command('merged')
       
       // 加载配置
       const config = loadConfig();
-      const targetDir = path.resolve(options.directory || config.defaults.directory);
+      const scanDirectories = resolveScanDirectories(config, {
+        directory: options.directory,
+        group: options.group
+      });
       
       console.log(chalk.blue(`🔍 检查分支 "${branchName}" 是否已合并到 "${options.baseBranch}"`));
-      console.log(chalk.gray(`目标目录: ${targetDir}`));
+      console.log(chalk.gray(`扫描目录: ${scanDirectories.join(', ')}`));
       console.log(chalk.gray(`Git fetch: ${options.fetch ? '启用' : '禁用'}`));
       console.log('');
 
-      if (!fs.existsSync(targetDir)) {
-        console.error(chalk.red(`❌ 目标目录不存在: ${targetDir}`));
+      const projects = scanAllGitProjects(config, {
+        directory: options.directory,
+        group: options.group
+      });
+
+      if (projects.length === 0) {
+        console.error(chalk.red(`❌ 未找到 Git 项目`));
         process.exit(1);
       }
 
-      // 获取所有项目目录
-      const projectDirs = fs.readdirSync(targetDir)
-        .filter(item => {
-          const itemPath = path.join(targetDir, item);
-          return fs.statSync(itemPath).isDirectory() && fs.existsSync(path.join(itemPath, '.git'));
-        });
-
-      console.log(chalk.blue(`📁 发现 ${projectDirs.length} 个 Git 项目`));
+      console.log(chalk.blue(`📁 发现 ${projects.length} 个 Git 项目`));
       console.log('');
 
       // 并发处理项目
@@ -67,24 +68,24 @@ export const mergedCommand = new Command('merged')
       const results: MergeCheckResult[] = [];
       
       // 创建进度条
-      const progressBar = createProgressBar(projectDirs.length, {
+      const progressBar = createProgressBar(projects.length, {
         prefix: '🔍 合并检查',
         showPercentage: true,
         showCount: true,
         width: 25
       });
       
-      for (let i = 0; i < projectDirs.length; i += parallel) {
-        const batch = projectDirs.slice(i, i + parallel);
-        const batchPromises = batch.map(projectName => 
-          processProject(projectName, targetDir, branchName, options.baseBranch, options)
+      for (let i = 0; i < projects.length; i += parallel) {
+        const batch = projects.slice(i, i + parallel);
+        const batchPromises = batch.map(project => 
+          processProject(project.name, project.path, branchName, options.baseBranch, options)
         );
         
         const batchResults = await Promise.all(batchPromises);
         results.push(...batchResults);
         
         // 更新进度条
-        const processed = Math.min(i + parallel, projectDirs.length);
+        const processed = Math.min(i + parallel, projects.length);
         progressBar.update(processed);
       }
 
@@ -99,13 +100,11 @@ export const mergedCommand = new Command('merged')
 
 async function processProject(
   projectName: string, 
-  targetDir: string, 
+  projectPath: string, 
   branchName: string,
   baseBranch: string,
   options: any
 ): Promise<MergeCheckResult> {
-  const projectPath = path.join(targetDir, projectName);
-  
   const result: MergeCheckResult = {
     name: projectName,
     path: projectPath,

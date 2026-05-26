@@ -130,8 +130,18 @@ export const initCommand = new Command('init')
           }
         ]);
 
+        const { directory } = await inquirer.prompt([
+          {
+            type: 'input',
+            name: 'directory',
+            message: '本地目录:',
+            default: groupAnswers.groupPath
+          }
+        ]);
+
         groups.push({
           path: groupAnswers.groupPath,
+          directory: directory.trim() || groupAnswers.groupPath,
           description: description || undefined
         });
 
@@ -159,8 +169,8 @@ export const initCommand = new Command('init')
         {
           type: 'input',
           name: 'directory',
-          message: '默认克隆目录:',
-          default: '../fe-xh'
+          message: '默认克隆目录 (未配置 group.directory 时的 fallback):',
+          default: '.'
         }
       ]);
       
@@ -226,9 +236,10 @@ export const initCommand = new Command('init')
       console.log(chalk.gray(`  GitLab URL: ${config.gitlab.url}`));
       console.log(chalk.gray(`  配置的 Groups: ${config.gitlab.groups.length} 个`));
       config.gitlab.groups.forEach((group, index) => {
-        console.log(chalk.gray(`    ${index + 1}. ${group.path}${group.description ? ` - ${group.description}` : ''}`));
+        const directoryInfo = group.directory ? ` → ${group.directory}` : '';
+        console.log(chalk.gray(`    ${index + 1}. ${group.path}${directoryInfo}${group.description ? ` - ${group.description}` : ''}`));
       });
-      console.log(chalk.gray(`  默认目录: ${config.defaults.directory}`));
+      console.log(chalk.gray(`  默认目录 (fallback): ${config.defaults.directory}`));
       console.log(chalk.gray(`  默认分支: ${config.defaults.branch}`));
       console.log(chalk.gray(`  默认并发: ${config.defaults.parallel}`));
 

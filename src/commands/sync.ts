@@ -5,10 +5,12 @@ import * as path from 'path';
 import { spawn } from 'child_process';
 import Table from 'cli-table3';
 import { loadConfig, loadBlacklist, configExists } from '../config';
-import { GitLabService, Repository } from '../services/gitlab';
+import { GitLabService } from '../services/gitlab';
+import { findGroupByPath, resolveRepoLocalPath, getAllGroupDirectories } from '../utils/directories';
 
 interface CloneOrUpdateResult {
   name: string;
+  groupPath?: string;
   action: 'cloned' | 'updated' | 'skipped' | 'error';
   success: boolean;
   error?: string;
@@ -28,7 +30,8 @@ interface CloneOrUpdateOptions {
 
 export const syncCommand = new Command('sync')
   .description('从 GitLab API 批量克隆或更新前端仓库')
-  .option('-d, --directory <dir>', '克隆目标目录（覆盖配置文件中的默认值）')
+  .option('-d, --directory <dir>', '克隆目标目录（仅覆盖未配置 group.directory 的旧 group）')
+  .option('-g, --group <path>', '仅同步指定的 GitLab Group')
   .option('-b, --blacklist <repos...>', '临时黑名单仓库列表，多个仓库用空格分隔', [])
   .option('--dry-run', '预览模式，不实际执行克隆或更新操作')
   .option('-p, --parallel <number>', '并发处理数量（覆盖配置文件中的默认值）')
@@ -50,7 +53,7 @@ export const syncCommand = new Command('sync')
       const config = loadConfig();
       
       // 合并命令行选项和配置文件
-      const targetDir = path.resolve(options.directory || config.defaults.directory);
+      const directoryOverride = options.directory as string | undefined;
       const parallel = options.parallel ? parseInt(options.parallel) : config.defaults.parallel;
       const gitUrlBase = options.gitUrlBase || config.gitlab.url;
       const branch = options.branch || config.defaults.branch;
@@ -64,19 +67,20 @@ export const syncCommand = new Command('sync')
       
       // 从 GitLab API 获取仓库列表
       const gitlabService = GitLabService.fromConfig();
-      const repositories = await gitlabService.fetchAllConfiguredProjects();
+      const groupProjects = await gitlabService.fetchProjectsByGroup(options.group);
+      const repositories = groupProjects.flatMap(item => item.repos);
       
       console.log(chalk.gray(`找到 ${repositories.length} 个仓库`));
       
       // 过滤掉黑名单和已归档的仓库
       const filteredRepos = repositories.filter(repo => {
         if (repo.archived) {
-          console.log(chalk.yellow(`⏭️  跳过已归档仓库: ${repo.name}`));
+          console.log(chalk.yellow(`⏭️  跳过已归档仓库: ${repo.name} (${repo.group_path})`));
           return false;
         }
         
         if (blacklist.includes(repo.name)) {
-          console.log(chalk.yellow(`⏭️  跳过黑名单仓库: ${repo.name}`));
+          console.log(chalk.yellow(`⏭️  跳过黑名单仓库: ${repo.name} (${repo.group_path})`));
           return false;
         }
         
@@ -92,8 +96,13 @@ export const syncCommand = new Command('sync')
       
       // 生成仓库信息
       const repoInfos = filteredRepos.map(repo => {
+        const group = findGroupByPath(config, repo.group_path);
+        if (!group) {
+          throw new Error(`未找到 Group 配置: ${repo.group_path}`);
+        }
+
         const gitUrl = `${gitUrlBase}${repo.relative_path}.git`;
-        const localPath = path.join(targetDir, repo.name);
+        const localPath = resolveRepoLocalPath(group, repo.name, config.defaults, directoryOverride);
         
         return {
           ...repo,
@@ -117,17 +126,25 @@ export const syncCommand = new Command('sync')
             action = chalk.red('错误: 目录存在但不是Git仓库');
           }
           
-          console.log(chalk.gray(`  ${index + 1}. ${repo.name} - ${action}`));
+          console.log(chalk.gray(`  ${index + 1}. [${repo.group_path}] ${repo.name} - ${action}`));
           console.log(chalk.gray(`     URL: ${repo.gitUrl}`));
           console.log(chalk.gray(`     路径: ${repo.localPath}`));
         });
         return;
       }
       
-      // 确保目标目录存在
-      if (!fs.existsSync(targetDir)) {
-        fs.mkdirSync(targetDir, { recursive: true });
-        console.log(chalk.green(`✅ 创建目标目录: ${targetDir}`));
+      // 确保所有 group 目录存在
+      const groupDirOptions = options.group
+        ? { groupPath: options.group as string }
+        : undefined;
+      const groupDirectories = directoryOverride
+        ? getAllGroupDirectories(config, { ...groupDirOptions, directoryOverride })
+        : getAllGroupDirectories(config, groupDirOptions);
+      for (const groupDir of groupDirectories) {
+        if (!fs.existsSync(groupDir)) {
+          fs.mkdirSync(groupDir, { recursive: true });
+          console.log(chalk.green(`✅ 创建目录: ${groupDir}`));
+        }
       }
       
       // 执行克隆或更新操作

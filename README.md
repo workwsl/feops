@@ -38,8 +38,8 @@ feops init
 该命令会引导你完成以下配置：
 - GitLab 服务器地址
 - GitLab Access Token
-- GitLab Group 路径（支持多个）
-- 默认克隆目录
+- GitLab Group 路径（支持多个，每个 Group 可配置独立本地目录）
+- 默认克隆目录（未配置 group.directory 时的 fallback）
 - 默认分支名称
 - 默认并发数
 
@@ -49,6 +49,9 @@ feops init
 ```bash
 # 克隆或更新所有配置的仓库
 feops sync
+
+# 仅同步指定 Group
+feops sync --group dev51/fe-xh
 
 # 预览模式，查看将要执行的操作
 feops sync --dry-run
@@ -141,8 +144,11 @@ feops config set defaults.branch main
 
 ### 管理 Group
 ```bash
-# 添加 Group
+# 添加 Group（本地目录默认等于 Group 路径）
 feops config add-group dev51/fe-xh -d "前端仓库组"
+
+# 添加 Group 并指定本地目录
+feops config add-group dev51/xbb -D dev51/xbb -d "xbb 仓库组"
 
 # 移除 Group
 feops config remove-group dev51/fe-xh
@@ -172,18 +178,38 @@ vim ~/.feops/blacklist.txt
     "groups": [
       {
         "path": "dev51/fe-xh",
-        "description": "前端仓库组"
+        "directory": "dev51/fe-xh",
+        "description": "前端 xh 组"
+      },
+      {
+        "path": "dev51/xbb",
+        "directory": "dev51/xbb",
+        "description": "xbb 组"
       }
     ]
   },
   "blacklist": [],
   "defaults": {
-    "directory": "../fe-xh",
+    "directory": ".",
     "branch": "master",
     "parallel": 3
   }
 }
 ```
+
+### 多 Group 目录结构
+
+每个 Group 可配置独立的 `directory`，sync 后目录结构如下：
+
+```
+dev51/fe-xh/<repo-name>/
+dev51/xbb/<repo-name>/
+```
+
+**兼容说明：**
+- 旧配置中 group 未设置 `directory` 时，该 group 的仓库仍写入 `defaults.directory/<repo-name>`
+- `sync -d` 仅覆盖未配置 `group.directory` 的旧 group
+- `branch` / `merged` / `uptodate` 未指定 `-d` 时，会自动扫描所有 group 目录
 
 ### 黑名单文件格式
 ```
@@ -225,6 +251,7 @@ feops/
 │   │   └── uptodate.ts     # 最新代码检查命令
 │   └── utils/              # 工具函数
 │       ├── index.ts
+│       ├── directories.ts  # 多 Group 目录解析
 │       └── progressBar.ts
 ├── dist/                   # 编译输出
 ├── docs/                   # 文档
@@ -325,7 +352,7 @@ feops init --force
 ```
 
 #### 配置项说明
-- GitLab URL, Access Token, Group Path, Default Directory, Default Branch, Parallel
+- GitLab URL, Access Token, Group Path, Group Directory, Default Directory (fallback), Default Branch, Parallel
 
 ### config - 配置管理
 
@@ -335,7 +362,7 @@ feops init --force
 - `config list [--show-token]`
 - `config set <key> <value>`（支持 gitlab.url/gitlab.token/defaults.*）
 - `config get <key>`
-- `config add-group <path> [-d desc]`
+- `config add-group <path> [-d desc] [-D directory]`
 - `config remove-group <path>`
 - `config edit-blacklist`
 
@@ -349,7 +376,8 @@ feops sync [options]
 ```
 
 #### 常用选项
-- `-d, --directory <dir>` 目标目录
+- `-d, --directory <dir>` 目标目录（仅覆盖未配置 group.directory 的旧 group）
+- `-g, --group <path>` 仅同步指定 Group
 - `-b, --blacklist <repos...>` 临时黑名单
 - `--dry-run` 预览
 - `-p, --parallel <n>` 并发数
@@ -364,19 +392,19 @@ feops list [--filter <p>] [--visibility <t>] [--format <type>] [...]
 ### branch - 查找分支
 
 ```bash
-feops branch <name> [--remote] [--no-fetch] [--format <type>] [-p <n>]
+feops branch <name> [-d <dir>] [-g <group>] [--remote] [--no-fetch] [--format <type>] [-p <n>]
 ```
 
 ### merged - 检查合并状态
 
 ```bash
-feops merged <branch> [--base-branch <branch>] [--show-missing] [--no-fetch] [--format <type>] [-p <n>]
+feops merged <branch> [-d <dir>] [-g <group>] [--base-branch <branch>] [--show-missing] [--no-fetch] [--format <type>] [-p <n>]
 ```
 
 ### uptodate - 检查是否最新
 
 ```bash
-feops uptodate <branch> [--base-branch <branch>] [--show-missing] [--no-fetch] [--format <type>] [-p <n>]
+feops uptodate <branch> [-d <dir>] [-g <group>] [--base-branch <branch>] [--show-missing] [--no-fetch] [--format <type>] [-p <n>]
 ```
 
 ### upgrade - 检查和更新工具
