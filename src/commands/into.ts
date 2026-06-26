@@ -8,25 +8,24 @@ import {
   BranchMergeCheckResult,
   checkBranchMergedInto,
   displayBranchMergeResults,
-  legacyMergedDisplayLabels,
   renderBranchMergeCheckMarkdown
 } from '../utils/mergeCheck';
 import { ReportMeta, writeMarkdownReport } from '../utils/markdownReport';
 
-export const mergedCommand = new Command('merged')
-  .description('检查指定分支是否已经合并到 master 分支（分支→master，等价于 feops into <base-branch> <branch>）')
-  .argument('<branch>', '要检查的分支名称')
+export const intoCommand = new Command('into')
+  .description('检查 source 分支是否已合并到 target 分支（source → target）')
+  .argument('<target>', '目标分支 A（合并目标）')
+  .argument('<source>', '源分支 B（待检查分支）')
   .option('-d, --directory <dir>', '项目目录（覆盖所有 group 目录，仅扫描指定目录）')
   .option('-g, --group <path>', '仅扫描指定 GitLab Group 的目录')
   .option('--no-fetch', '跳过 git fetch 操作')
   .option('--local', '检查本地分支（本地优先，远程兜底）')
   .option('--format <type>', '输出格式 (table|json|simple)', 'table')
   .option('-p, --parallel <number>', '并发处理数量', '5')
-  .option('--base-branch <branch>', '基准分支名称', 'master')
   .option('--show-missing', '显示不存在分支的项目')
   .option('-o, --output <file>', '将检查结果写入 Markdown 报告文件')
   .option('--merge-mode <mode>', '合并检测模式: strict|content|auto', 'auto')
-  .action(async (branchName: string, options) => {
+  .action(async (targetBranch: string, sourceBranch: string, options) => {
     try {
       if (!configExists()) {
         console.error(chalk.red('❌ 配置文件不存在'));
@@ -46,7 +45,7 @@ export const mergedCommand = new Command('merged')
         ? '远程分支（origin/*，本地兜底）'
         : '本地分支（本地优先，远程兜底）';
 
-      console.log(chalk.blue(`🔍 检查分支 "${branchName}" 是否已合并到 "${options.baseBranch}"`));
+      console.log(chalk.blue(`🔍 检查分支 "${sourceBranch}" 是否已合并到 "${targetBranch}"`));
       console.log(chalk.gray(`扫描目录: ${scanDirectories.join(', ')}`));
       console.log(chalk.gray(`Git fetch: ${options.fetch ? '启用' : '禁用'}`));
       console.log(chalk.gray(`检查范围: ${scopeLabel}`));
@@ -82,8 +81,8 @@ export const mergedCommand = new Command('merged')
           Promise.resolve(checkBranchMergedInto(
             project.name,
             project.path,
-            branchName,
-            options.baseBranch,
+            sourceBranch,
+            targetBranch,
             refPreference,
             { fetch: options.fetch, mergeMode: options.mergeMode }
           ))
@@ -100,28 +99,26 @@ export const mergedCommand = new Command('merged')
       displayBranchMergeResults(
         results,
         options.format,
-        branchName,
-        options.baseBranch,
-        options.showMissing,
-        'branch-base',
-        legacyMergedDisplayLabels
+        sourceBranch,
+        targetBranch,
+        options.showMissing
       );
 
       if (options.output) {
         const reportMeta: ReportMeta = {
-          command: `feops merged ${branchName} --base-branch ${options.baseBranch}`,
-          description: `检查 ${branchName} 是否已合并到 ${options.baseBranch}`,
+          command: `feops into ${targetBranch} ${sourceBranch}`,
+          description: `检查 ${sourceBranch} 是否已合并到 ${targetBranch}`,
           scanDirectories,
           scopeLabel,
           fetchEnabled: options.fetch !== false
         };
         const md = renderBranchMergeCheckMarkdown(
           results,
-          branchName,
-          options.baseBranch,
+          sourceBranch,
+          targetBranch,
           reportMeta,
           options.showMissing,
-          'feops merged 检查报告'
+          'feops into 检查报告'
         );
         const written = writeMarkdownReport(options.output, md);
         console.log(chalk.green(`\n报告已写入: ${written}`));

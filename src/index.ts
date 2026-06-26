@@ -9,6 +9,7 @@ import { listCommand } from './commands/list';
 import { syncCommand } from './commands/sync';
 import { branchCommand } from './commands/branch';
 import { mergedCommand } from './commands/merged';
+import { intoCommand } from './commands/into';
 import { uptodateCommand } from './commands/uptodate';
 import { upgradeCommand } from './commands/upgrade';
 import { checkForUpdates } from './utils/updateChecker';
@@ -34,6 +35,7 @@ program.addCommand(listCommand);
 program.addCommand(syncCommand);
 program.addCommand(branchCommand);
 program.addCommand(mergedCommand);
+program.addCommand(intoCommand);
 program.addCommand(uptodateCommand);
 program.addCommand(upgradeCommand);
 
@@ -44,10 +46,12 @@ Examples:
   $ feops sync                      # 智能克隆或更新前端仓库
   $ feops sync --dry-run            # 预览模式，查看将要执行的操作
   $ feops list                      # 列出所有仓库信息
-  $ feops branch main               # 查找包含 main 分支的项目
-  $ feops branch feature/auth --remote  # 查找包含指定分支的项目（包括远程分支）
-  $ feops merged feature/auth       # 检查 feature/auth 分支是否已合并到 master
-  $ feops uptodate dev              # 检查 dev 分支是否包含最新 master 代码
+  $ feops branch main               # 查找包含 main 分支的项目（默认检查 origin/*）
+  $ feops branch feature/auth --local  # 仅检查本地分支
+  $ feops merged feature/auth       # 检查 feature/auth 是否已合并到 master（默认 origin/*）
+  $ feops into release feature/auth # 检查 feature/auth 是否已合并到 release
+  $ feops into release feature/auth -o report.md  # 导出 Markdown 报告
+  $ feops uptodate dev              # 检查 dev 是否包含最新 master 代码（默认 origin/*）
   $ feops config list               # 查看配置
   $ feops upgrade                   # 检查并更新到最新版本
   $ feops upgrade --check           # 仅检查是否有更新

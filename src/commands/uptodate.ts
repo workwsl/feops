@@ -5,12 +5,22 @@ import Table from 'cli-table3';
 import { createProgressBar } from '../utils/progressBar';
 import { configExists, loadConfig } from '../config';
 import { resolveScanDirectories, scanAllGitProjects } from '../utils/directories';
+import { RefPreference, resolveGitRef } from '../utils/gitRef';
+import {
+  mdTable,
+  renderReportHeader,
+  renderSummarySection,
+  ReportMeta,
+  writeMarkdownReport
+} from '../utils/markdownReport';
 
 interface MasterMergeCheckResult {
   name: string;
   path: string;
   branchExists: boolean;
   masterExists: boolean;
+  branchRef?: string;
+  baseRef?: string;
   hasMasterChanges: boolean;
   isUpToDate: boolean;
   behindCommits: number;
@@ -28,10 +38,12 @@ export const uptodateCommand = new Command('uptodate')
   .option('-d, --directory <dir>', '项目目录（覆盖所有 group 目录，仅扫描指定目录）')
   .option('-g, --group <path>', '仅扫描指定 GitLab Group 的目录')
   .option('--no-fetch', '跳过 git fetch 操作')
+  .option('--local', '检查本地分支（本地优先，远程兜底）')
   .option('--format <type>', '输出格式 (table|json|simple)', 'table')
   .option('-p, --parallel <number>', '并发处理数量', '5')
   .option('--base-branch <branch>', '基准分支名称', 'master')
   .option('--show-missing', '显示不存在分支的项目')
+  .option('-o, --output <file>', '将检查结果写入 Markdown 报告文件')
   .action(async (branchName: string, options) => {
     try {
       // 检查配置文件是否存在
@@ -49,9 +61,15 @@ export const uptodateCommand = new Command('uptodate')
         group: options.group
       });
       
+      const refPreference: RefPreference = options.local ? 'local' : 'remote';
+      const scopeLabel = refPreference === 'remote'
+        ? '远程分支（origin/*，本地兜底）'
+        : '本地分支（本地优先，远程兜底）';
+
       console.log(chalk.blue(`🔍 检查分支 "${branchName}" 是否包含最新的 "${options.baseBranch}" 代码`));
       console.log(chalk.gray(`扫描目录: ${scanDirectories.join(', ')}`));
       console.log(chalk.gray(`Git fetch: ${options.fetch ? '启用' : '禁用'}`));
+      console.log(chalk.gray(`检查范围: ${scopeLabel}`));
       console.log('');
 
       const projects = scanAllGitProjects(config, {
@@ -82,7 +100,7 @@ export const uptodateCommand = new Command('uptodate')
       for (let i = 0; i < projects.length; i += parallel) {
         const batch = projects.slice(i, i + parallel);
         const batchPromises = batch.map(project => 
-          processProject(project.name, project.path, branchName, options.baseBranch, options)
+          processProject(project.name, project.path, branchName, options.baseBranch, refPreference, options)
         );
         
         const batchResults = await Promise.all(batchPromises);
@@ -96,6 +114,25 @@ export const uptodateCommand = new Command('uptodate')
       console.log('');
       displayResults(results, options.format, branchName, options.baseBranch, options.showMissing);
 
+      if (options.output) {
+        const reportMeta: ReportMeta = {
+          command: `feops uptodate ${branchName} --base-branch ${options.baseBranch}`,
+          description: `检查 ${branchName} 是否包含最新 ${options.baseBranch} 代码`,
+          scanDirectories,
+          scopeLabel,
+          fetchEnabled: options.fetch !== false
+        };
+        const md = renderUptodateMarkdown(
+          results,
+          branchName,
+          options.baseBranch,
+          reportMeta,
+          options.showMissing
+        );
+        const written = writeMarkdownReport(options.output, md);
+        console.log(chalk.green(`\n报告已写入: ${written}`));
+      }
+
     } catch (error) {
       console.error(chalk.red('❌ 执行失败:'), error);
       process.exit(1);
@@ -107,6 +144,7 @@ async function processProject(
   projectPath: string, 
   branchName: string,
   baseBranch: string,
+  refPreference: RefPreference,
   options: any
 ): Promise<MasterMergeCheckResult> {
   const result: MasterMergeCheckResult = {
@@ -141,48 +179,18 @@ async function processProject(
       result.fetchSuccess = true; // 跳过 fetch 时认为成功
     }
 
-    // 检查基准分支是否存在
-    try {
-      execSync(`git rev-parse --verify ${baseBranch}`, { 
-        cwd: projectPath, 
-        stdio: ['pipe', 'pipe', 'ignore'] 
-      });
-      result.masterExists = true;
-      actualMasterRef = baseBranch;
-    } catch {
-      // 尝试检查远程分支
-      try {
-        execSync(`git rev-parse --verify origin/${baseBranch}`, { 
-          cwd: projectPath, 
-          stdio: ['pipe', 'pipe', 'ignore'] 
-        });
-        result.masterExists = true;
-        actualMasterRef = `origin/${baseBranch}`;
-      } catch {
-        result.masterExists = false;
-      }
+    const resolvedBase = resolveGitRef(projectPath, baseBranch, refPreference);
+    result.masterExists = resolvedBase.exists;
+    if (resolvedBase.exists) {
+      actualMasterRef = resolvedBase.ref;
+      result.baseRef = resolvedBase.ref;
     }
 
-    // 检查目标分支是否存在
-    try {
-      execSync(`git rev-parse --verify ${branchName}`, { 
-        cwd: projectPath, 
-        stdio: ['pipe', 'pipe', 'ignore'] 
-      });
-      result.branchExists = true;
-      actualBranchRef = branchName;
-    } catch {
-      // 尝试检查远程分支
-      try {
-        execSync(`git rev-parse --verify origin/${branchName}`, { 
-          cwd: projectPath, 
-          stdio: ['pipe', 'pipe', 'ignore'] 
-        });
-        result.branchExists = true;
-        actualBranchRef = `origin/${branchName}`;
-      } catch {
-        result.branchExists = false;
-      }
+    const resolvedBranch = resolveGitRef(projectPath, branchName, refPreference);
+    result.branchExists = resolvedBranch.exists;
+    if (resolvedBranch.exists) {
+      actualBranchRef = resolvedBranch.ref;
+      result.branchRef = resolvedBranch.ref;
     }
 
     // 如果两个分支都存在，检查master代码是否已合并到指定分支
@@ -249,7 +257,7 @@ async function processProject(
           // 计算分支落后master多少个提交
           try {
             const behindCount = execSync(
-              `git rev-list --count ${branchName}..${baseBranch}`, 
+              `git rev-list --count ${actualBranchRef}..${actualMasterRef}`, 
               { 
                 cwd: projectPath, 
                 stdio: 'pipe',
@@ -408,4 +416,92 @@ function displayResults(results: MasterMergeCheckResult[], format: string, branc
     console.log(`  基准分支不存在: ${chalk.gray(missingMasterResults.length)}`);
   }
   console.log(`  处理错误: ${chalk.red(errorResults.length)}`);
+}
+
+export function renderUptodateMarkdown(
+  results: MasterMergeCheckResult[],
+  branchName: string,
+  baseBranch: string,
+  meta: ReportMeta,
+  showMissing: boolean = false
+): string {
+  const upToDateResults = results.filter(r => r.isUpToDate);
+  const behindResults = results.filter(r => r.hasMasterChanges && !r.isUpToDate);
+  const missingBranchResults = results.filter(r => !r.branchExists);
+  const missingMasterResults = results.filter(r => !r.masterExists);
+  const errorResults = results.filter(r => r.error);
+  const validResults = results.filter(r => r.branchExists && r.masterExists);
+
+  const sections = [
+    renderReportHeader('feops uptodate 检查报告', meta, {
+      检查分支: branchName,
+      基准分支: baseBranch
+    }),
+    '',
+    renderSummarySection([
+      ['总项目数', results.length],
+      ['已同步', upToDateResults.length],
+      ['落后', behindResults.length],
+      ['分支不存在', missingBranchResults.length],
+      ['基准分支不存在', missingMasterResults.length],
+      ['处理错误', errorResults.length]
+    ])
+  ];
+
+  if (validResults.length > 0) {
+    sections.push(
+      '',
+      '## 结果明细',
+      '',
+      mdTable(
+        ['序号', '项目', '分支 Ref', '基准 Ref', '状态', '落后提交数'],
+        validResults.map((result, index) => [
+          String(index + 1),
+          result.name,
+          result.branchRef || branchName,
+          result.baseRef || baseBranch,
+          result.isUpToDate ? '已同步' : '落后',
+          result.behindCommits > 0 ? String(result.behindCommits) : '-'
+        ])
+      )
+    );
+  }
+
+  if (showMissing && missingBranchResults.length > 0) {
+    sections.push(
+      '',
+      '## 分支不存在',
+      '',
+      mdTable(
+        ['项目', '路径'],
+        missingBranchResults.map(r => [r.name, r.path])
+      )
+    );
+  }
+
+  if (showMissing && missingMasterResults.length > 0) {
+    sections.push(
+      '',
+      '## 基准分支不存在',
+      '',
+      mdTable(
+        ['项目', '路径'],
+        missingMasterResults.map(r => [r.name, r.path])
+      )
+    );
+  }
+
+  if (errorResults.length > 0) {
+    sections.push(
+      '',
+      '## 处理错误',
+      '',
+      mdTable(
+        ['项目', '错误信息'],
+        errorResults.map(r => [r.name, r.error || 'Unknown error'])
+      )
+    );
+  }
+
+  return sections.join('\n');
 }

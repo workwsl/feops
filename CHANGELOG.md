@@ -5,6 +5,27 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [2.0.0] - 2026-06-26
+
+### 新增
+
+- `into` 命令：检查 B 是否已合并到 A（`feops into <target> <source>`）
+- `branch` / `merged` / `into` / `uptodate` 支持 `-o, --output <file>` 导出 Markdown 检查报告
+
+### 变更（Breaking）
+
+- `branch` 默认从本地分支列表搜索改为优先检查 `origin/*` 远程跟踪分支
+- `merged` / `uptodate` 默认从本地优先改为远程优先（远程不存在时回退本地）
+- `branch --remote` 标记为弃用，行为与默认相同；新增 `--local` 恢复旧行为
+
+### 改进
+
+- 抽取共用 `resolveGitRef` 工具，统一分支 ref 解析逻辑
+- 抽取共用 `mergeCheck` 模块，`merged` 与 `into` 复用合并检查逻辑
+- `merged` / `into` 新增 `--merge-mode`（strict/content/auto），auto 模式支持 squash merge 补丁等价检测
+- 合并检查结果展示实际 Ref、检测模式、待合入提交数
+- 修复 `uptodate` 的 `behindCommits` 与主判断 ref 不一致的问题
+
 ## [1.1.0] - 2026-05-26
 
 ### 新增

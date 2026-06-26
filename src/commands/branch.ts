@@ -5,25 +5,36 @@ import Table from 'cli-table3';
 import { createProgressBar } from '../utils/progressBar';
 import { configExists, loadConfig } from '../config';
 import { resolveScanDirectories, scanAllGitProjects } from '../utils/directories';
+import { RefPreference, resolveGitRef } from '../utils/gitRef';
+import {
+  mdTable,
+  renderReportHeader,
+  renderSummarySection,
+  ReportMeta,
+  writeMarkdownReport
+} from '../utils/markdownReport';
 
 interface BranchSearchResult {
   name: string;
   path: string;
-  branches: string[];
+  branchRef?: string;
+  branchSource?: 'remote' | 'local';
   hasTargetBranch: boolean;
   fetchSuccess: boolean;
   error?: string;
 }
 
 export const branchCommand = new Command('branch')
-  .description('查找包含指定分支的项目（会先执行 git fetch 同步分支信息）')
+  .description('查找包含指定分支的项目（默认检查 origin/* 远程跟踪分支）')
   .argument('<branch>', '要查找的分支名称')
   .option('-d, --directory <dir>', '项目目录（覆盖所有 group 目录，仅扫描指定目录）')
   .option('-g, --group <path>', '仅扫描指定 GitLab Group 的目录')
   .option('--no-fetch', '跳过 git fetch 操作')
-  .option('--remote', '同时搜索远程分支')
+  .option('--local', '仅检查本地分支（本地优先，远程兜底）')
+  .option('--remote', '（已弃用，等同于默认行为）同时搜索远程分支')
   .option('--format <type>', '输出格式 (table|json|simple)', 'table')
   .option('-p, --parallel <number>', '并发处理数量', '5')
+  .option('-o, --output <file>', '将检查结果写入 Markdown 报告文件')
   .action(async (branchName: string, options) => {
     try {
       console.log(chalk.blue(`🔍 查找包含分支 "${branchName}" 的项目`));
@@ -42,10 +53,19 @@ export const branchCommand = new Command('branch')
         directory: options.directory,
         group: options.group
       });
-      
+
+      const refPreference: RefPreference = options.local ? 'local' : 'remote';
+      const scopeLabel = refPreference === 'remote'
+        ? '远程分支（origin/*，本地兜底）'
+        : '本地分支（本地优先，远程兜底）';
+
+      if (options.remote && !options.local) {
+        console.log(chalk.yellow('⚠️  --remote 已弃用，默认即检查远程分支'));
+      }
+
       console.log(chalk.gray(`扫描目录: ${scanDirectories.join(', ')}`));
       console.log(chalk.gray(`Git fetch: ${options.fetch ? '启用' : '禁用'}`));
-      console.log(chalk.gray(`搜索远程分支: ${options.remote ? '是' : '否'}`));
+      console.log(chalk.gray(`搜索范围: ${scopeLabel}`));
       console.log('');
 
       const projects = scanAllGitProjects(config, {
@@ -79,7 +99,7 @@ export const branchCommand = new Command('branch')
       for (let i = 0; i < projects.length; i += parallel) {
         const batch = projects.slice(i, i + parallel);
         const batchPromises = batch.map(project => 
-          processProject(project.name, project.path, branchName, options)
+          processProject(project.name, project.path, branchName, refPreference, options)
         );
         
         const batchResults = await Promise.all(batchPromises);
@@ -118,6 +138,19 @@ export const branchCommand = new Command('branch')
         });
       }
 
+      if (options.output) {
+        const reportMeta: ReportMeta = {
+          command: `feops branch ${branchName}`,
+          description: `查找包含分支 ${branchName} 的项目`,
+          scanDirectories,
+          scopeLabel,
+          fetchEnabled: options.fetch !== false
+        };
+        const md = renderBranchSearchMarkdown(results, branchName, reportMeta);
+        const written = writeMarkdownReport(options.output, md);
+        console.log(chalk.green(`\n报告已写入: ${written}`));
+      }
+
     } catch (error) {
       console.error(chalk.red('❌ 执行失败:'), error);
       process.exit(1);
@@ -127,13 +160,13 @@ export const branchCommand = new Command('branch')
 async function processProject(
   projectName: string, 
   projectPath: string, 
-  branchName: string, 
+  branchName: string,
+  refPreference: RefPreference,
   options: any
 ): Promise<BranchSearchResult> {
   const result: BranchSearchResult = {
     name: projectName,
     path: projectPath,
-    branches: [],
     hasTargetBranch: false,
     fetchSuccess: false
   };
@@ -142,38 +175,25 @@ async function processProject(
     // 执行 git fetch（如果启用）
     if (options.fetch) {
       try {
-        execSync('git fetch --all', { 
+        execSync('git fetch --all --prune', { 
           cwd: projectPath, 
           stdio: 'pipe',
           timeout: 30000 // 30秒超时
         });
         result.fetchSuccess = true;
       } catch (fetchError) {
-        console.log(chalk.yellow(`⚠️  ${projectName}: git fetch 失败，继续使用本地分支信息`));
+        console.log(chalk.yellow(`⚠️  ${projectName}: git fetch 失败，继续使用已有分支信息`));
       }
+    } else {
+      result.fetchSuccess = true;
     }
 
-    // 获取分支列表
-    const branchCommand = options.remote 
-      ? 'git branch -a' 
-      : 'git branch';
-    
-    const branchOutput = execSync(branchCommand, { 
-      cwd: projectPath, 
-      encoding: 'utf-8',
-      stdio: 'pipe'
-    });
-
-    const branches = branchOutput
-      .split('\n')
-      .map(line => line.trim().replace(/^\*\s*/, '').replace(/^remotes\/origin\//, ''))
-      .filter(line => line && !line.includes('HEAD ->'))
-      .filter((branch, index, arr) => arr.indexOf(branch) === index); // 去重
-
-    result.branches = branches;
-    result.hasTargetBranch = branches.some(branch => 
-      branch === branchName
-    );
+    const resolved = resolveGitRef(projectPath, branchName, refPreference);
+    result.hasTargetBranch = resolved.exists;
+    if (resolved.exists && resolved.source !== 'none') {
+      result.branchRef = resolved.ref;
+      result.branchSource = resolved.source;
+    }
 
   } catch (error) {
     result.error = error instanceof Error ? error.message : String(error);
@@ -191,7 +211,8 @@ function displayResults(results: BranchSearchResult[], format: string, branchNam
     case 'simple':
       console.log(chalk.green(`📋 包含分支 "${branchName}" 的项目:`));
       results.forEach((result, index) => {
-        console.log(`${index + 1}. ${result.name}`);
+        const refInfo = result.branchRef ? ` (${result.branchRef})` : '';
+        console.log(`${index + 1}. ${result.name}${refInfo}`);
       });
       break;
     
@@ -210,43 +231,41 @@ function displayResults(results: BranchSearchResult[], format: string, branchNam
         head: [
           chalk.cyan('序号'),
           chalk.cyan('项目名称'),
-          chalk.cyan('匹配的分支'),
+          chalk.cyan('匹配 Ref'),
+          chalk.cyan('来源'),
           chalk.cyan('Fetch状态')
         ],
         style: {
           head: [],
           border: ['grey']
         },
-        colWidths: [6, 35, 40, 12]
+        colWidths: [6, 30, 28, 10, 12]
       });
 
       // 添加数据行
       results.forEach((result, index) => {
-        const matchedBranches = result.branches.filter(branch => 
-          branch === branchName || branch.includes(branchName)
-        );
-        
-        const branchText = matchedBranches.slice(0, 2).join(', ') + 
-          (matchedBranches.length > 2 ? ` (+${matchedBranches.length - 2})` : '');
-        
         const fetchStatus = result.fetchSuccess ? 
           chalk.green('✓') : 
           (result.error ? chalk.red('✗') : chalk.yellow('⚠'));
 
-        // 截断过长的项目名称
-        const truncatedName = result.name.length > 32 ? 
-          result.name.substring(0, 29) + '...' : 
+        const truncatedName = result.name.length > 27 ? 
+          result.name.substring(0, 24) + '...' : 
           result.name;
 
-        // 截断过长的分支信息
-        const truncatedBranch = branchText.length > 37 ? 
-          branchText.substring(0, 34) + '...' : 
-          branchText;
+        const branchRef = result.branchRef || branchName;
+        const truncatedRef = branchRef.length > 25 ? 
+          branchRef.substring(0, 22) + '...' : 
+          branchRef;
+
+        const sourceLabel = result.branchSource === 'remote'
+          ? chalk.blue('远程')
+          : chalk.gray('本地');
         
         table.push([
           (index + 1).toString(),
           truncatedName,
-          truncatedBranch,
+          truncatedRef,
+          sourceLabel,
           fetchStatus
         ]);
       });
@@ -265,4 +284,57 @@ function displayResults(results: BranchSearchResult[], format: string, branchNam
       }
       break;
   }
+}
+
+export function renderBranchSearchMarkdown(
+  results: BranchSearchResult[],
+  branchName: string,
+  meta: ReportMeta
+): string {
+  const matchedProjects = results.filter(r => r.hasTargetBranch);
+  const failedProjects = results.filter(r => r.error);
+
+  const sections = [
+    renderReportHeader('feops branch 检查报告', meta, {
+      查找分支: branchName
+    }),
+    '',
+    renderSummarySection([
+      ['总项目数', results.length],
+      ['包含分支', matchedProjects.length],
+      ['处理失败', failedProjects.length]
+    ])
+  ];
+
+  if (matchedProjects.length > 0) {
+    sections.push(
+      '',
+      '## 匹配项目',
+      '',
+      mdTable(
+        ['序号', '项目', 'Ref', '来源', 'Fetch'],
+        matchedProjects.map((result, index) => [
+          String(index + 1),
+          result.name,
+          result.branchRef || branchName,
+          result.branchSource === 'remote' ? '远程' : '本地',
+          result.fetchSuccess ? '成功' : '失败'
+        ])
+      )
+    );
+  }
+
+  if (failedProjects.length > 0) {
+    sections.push(
+      '',
+      '## 处理失败',
+      '',
+      mdTable(
+        ['项目', '错误信息'],
+        failedProjects.map(r => [r.name, r.error || 'Unknown error'])
+      )
+    );
+  }
+
+  return sections.join('\n');
 }
