@@ -38,8 +38,8 @@ feops init
 该命令会引导你完成以下配置：
 - GitLab 服务器地址
 - GitLab Access Token
-- GitLab Group 路径（支持多个，每个 Group 可配置独立本地目录）
-- 默认克隆目录（未配置 group.directory 时的 fallback）
+- GitLab Group 路径（支持多个；本地目录由 group.path 推导）
+- 本地根目录（相对 group.path 会拼到其下）
 - 默认分支名称
 - 默认并发数
 
@@ -145,11 +145,11 @@ feops config set defaults.branch main
 
 ### 管理 Group
 ```bash
-# 添加 Group（本地目录默认等于 Group 路径）
+# 添加 Group（本地目录由 group.path 拼到 defaults.directory 下）
 feops config add-group dev51/fe-xh -d "前端仓库组"
 
-# 添加 Group 并指定本地目录
-feops config add-group dev51/xbb -D dev51/xbb -d "xbb 仓库组"
+# 添加另一个 Group
+feops config add-group dev51/xbb -d "xbb 仓库组"
 
 # 移除 Group
 feops config remove-group dev51/fe-xh
@@ -179,12 +179,10 @@ vim ~/.feops/blacklist.txt
     "groups": [
       {
         "path": "dev51/fe-xh",
-        "directory": "dev51/fe-xh",
         "description": "前端 xh 组"
       },
       {
         "path": "dev51/xbb",
-        "directory": "dev51/xbb",
         "description": "xbb 组"
       }
     ]
@@ -200,7 +198,7 @@ vim ~/.feops/blacklist.txt
 
 ### 多 Group 目录结构
 
-每个 Group 可配置独立的 `directory`，sync 后目录结构如下：
+本地目录由 `group.path` 推导，sync 后目录结构如下（`defaults.directory` 为 `.` 时）：
 
 ```
 dev51/fe-xh/<repo-name>/
@@ -208,10 +206,10 @@ dev51/xbb/<repo-name>/
 ```
 
 **目录解析规则：**
-- `directory` 为相对路径时，拼接到 `defaults.directory`（与执行时 cwd 无关）
-- `directory` 为绝对路径时，直接使用该路径
-- 旧配置中 group 未设置 `directory` 时，该 group 的仓库仍写入 `defaults.directory/<repo-name>`
-- `sync -d` 仅覆盖未配置 `group.directory` 的旧 group
+- `group.path` 为相对路径时，拼接到 `defaults.directory`（与执行时 cwd 无关）
+- `group.path` 为绝对路径时，直接使用该路径（日常仍应配置相对 GitLab Group 路径）
+- `group.directory` 已废弃，加载配置时忽略
+- `sync -d` 临时覆盖本地根目录（相对 path 拼到 `-d` 下；绝对 path 不受影响）
 - `branch` / `merged` / `into` / `uptodate` 未指定 `-d` 时，会自动扫描所有 group 目录
 
 ### 黑名单文件格式
@@ -360,7 +358,7 @@ feops init --force
 ```
 
 #### 配置项说明
-- GitLab URL, Access Token, Group Path, Group Directory, Default Directory (fallback), Default Branch, Parallel
+- GitLab URL, Access Token, Group Path, Local Root Directory, Default Branch, Parallel
 
 ### config - 配置管理
 
@@ -370,7 +368,7 @@ feops init --force
 - `config list [--show-token]`
 - `config set <key> <value>`（支持 gitlab.url/gitlab.token/defaults.*）
 - `config get <key>`
-- `config add-group <path> [-d desc] [-D directory]`
+- `config add-group <path> [-d desc]`
 - `config remove-group <path>`
 - `config edit-blacklist`
 
@@ -384,7 +382,7 @@ feops sync [options]
 ```
 
 #### 常用选项
-- `-d, --directory <dir>` 目标目录（仅覆盖未配置 group.directory 的旧 group）
+- `-d, --directory <dir>` 临时覆盖本地根目录（相对 group.path 拼到其下）
 - `-g, --group <path>` 仅同步指定 Group
 - `-b, --blacklist <repos...>` 临时黑名单
 - `--dry-run` 预览
@@ -516,14 +514,16 @@ feops upgrade --help
 
 详细的更新日志请查看 [CHANGELOG.md](./CHANGELOG.md)
 
+### v2.1.0 (2026-07-21)
+
+#### 变更
+- 🔄 废弃 `group.directory`，本地目录改由 `group.path` 推导（相对路径拼 `defaults.directory`）
+
 ### v1.1.0 (2026-05-26)
 
 #### 新增
 - ✨ 支持多 Group 独立本地目录配置
 - ✨ `sync` / `branch` / `merged` / `uptodate` 新增 `--group` 选项
-
-#### 改进
-- 🔄 旧配置兼容：未设置 `group.directory` 时仍使用 `defaults.directory`
 
 ### v1.0.1 (2025-11-21)
 

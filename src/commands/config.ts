@@ -12,6 +12,7 @@ import {
   GitLabGroup
 } from '../config';
 import { GitLabService } from '../services/gitlab';
+import { resolveGroupDirectory } from '../utils/directories';
 
 export const configCommand = new Command('config')
   .description('管理 feops 配置');
@@ -48,13 +49,13 @@ configCommand
       
       console.log(chalk.gray(`  Groups: ${config.gitlab.groups.length} 个`));
       config.gitlab.groups.forEach((group, index) => {
-        const directoryInfo = group.directory ? ` → ${group.directory}` : ` → ${config.defaults.directory} (fallback)`;
-        console.log(chalk.gray(`    ${index + 1}. ${group.path}${directoryInfo}${group.description ? ` - ${group.description}` : ''}`));
+        const localDir = resolveGroupDirectory(group, config.defaults);
+        console.log(chalk.gray(`    ${index + 1}. ${group.path} → ${localDir}${group.description ? ` - ${group.description}` : ''}`));
       });
       
       console.log('');
       console.log(chalk.bold('默认配置:'));
-      console.log(chalk.gray(`  目录 (fallback): ${config.defaults.directory}`));
+      console.log(chalk.gray(`  本地根目录: ${config.defaults.directory}`));
       console.log(chalk.gray(`  分支: ${config.defaults.branch}`));
       console.log(chalk.gray(`  并发: ${config.defaults.parallel}`));
       
@@ -187,7 +188,6 @@ configCommand
   .description('添加 GitLab Group')
   .argument('<path>', 'Group 路径 (如: dev51/fe-xh)')
   .option('-d, --description <desc>', 'Group 描述')
-  .option('-D, --directory <dir>', '本地目录 (默认等于 Group 路径)')
   .action(async (groupPath: string, options) => {
     if (!configExists()) {
       console.error(chalk.red('❌ 配置文件不存在'));
@@ -220,7 +220,6 @@ configCommand
       // 添加 Group
       const newGroup: GitLabGroup = {
         path: groupPath,
-        directory: options.directory || groupPath,
         description: options.description
       };
       
@@ -228,7 +227,7 @@ configCommand
       saveConfig(config);
       
       console.log(chalk.green(`✅ Group 已添加: ${groupPath}`));
-      console.log(chalk.gray(`   本地目录: ${newGroup.directory}`));
+      console.log(chalk.gray(`   本地目录: ${resolveGroupDirectory(newGroup, config.defaults)}`));
       
     } catch (error) {
       console.error(chalk.red('❌ 添加 Group 失败:'), error instanceof Error ? error.message : String(error));

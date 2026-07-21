@@ -45,8 +45,8 @@ const newConfig = {
     url: 'http://gitcode.example.com',
     token: 'test-token',
     groups: [
-      { path: 'dev51/fe-xh', directory: 'dev51/fe-xh', description: 'xh' },
-      { path: 'dev51/xbb', directory: 'dev51/xbb', description: 'xbb' }
+      { path: 'dev51/fe-xh', description: 'xh' },
+      { path: 'dev51/xbb', description: 'xbb' }
     ]
   },
   blacklist: [],
@@ -57,58 +57,43 @@ const newConfig = {
   }
 };
 
-const legacyConfig = {
-  gitlab: {
-    url: 'http://gitcode.example.com',
-    token: 'test-token',
-    groups: [{ path: 'dev51/fe-xh', description: 'legacy' }]
-  },
-  blacklist: [],
-  defaults
-};
-
 console.log('=== 单元测试: 目录解析 ===\n');
 
 assertEqual(
-  resolveGroupDirectory({ path: 'dev51/fe-xh', directory: 'dev51/fe-xh' }, defaults),
-  path.resolve(defaults.directory, 'dev51/fe-xh'),
-  '相对 directory 拼接到 defaults.directory'
-);
-
-assertEqual(
-  resolveGroupDirectory({ path: 'dev51/fe-xh', directory: '/abs/fe-xh' }, defaults),
-  path.resolve('/abs/fe-xh'),
-  '绝对 directory 直接使用自身路径'
-);
-
-assertEqual(
   resolveGroupDirectory({ path: 'dev51/fe-xh' }, defaults),
-  path.resolve('../fe-xh'),
-  '旧配置 group 使用 defaults.directory'
+  path.resolve(defaults.directory, 'dev51/fe-xh'),
+  '相对 path 拼接到 defaults.directory'
 );
 
 assertEqual(
-  resolveRepoLocalPath({ path: 'dev51/fe-xh', directory: 'dev51/fe-xh' }, 'my-app', defaults),
-  path.resolve(defaults.directory, 'dev51/fe-xh/my-app'),
-  '新配置 repo 路径 = defaults.directory/directory/repo-name'
+  resolveGroupDirectory({ path: '/abs/fe-xh' }, defaults),
+  path.resolve('/abs/fe-xh'),
+  '绝对 path 直接使用自身路径'
 );
 
 assertEqual(
   resolveRepoLocalPath({ path: 'dev51/fe-xh' }, 'my-app', defaults),
-  path.resolve('../fe-xh/my-app'),
-  '旧配置 repo 路径 = defaults.directory/repo-name'
+  path.resolve(defaults.directory, 'dev51/fe-xh/my-app'),
+  'repo 路径 = defaults.directory/group.path/repo-name'
 );
 
 assertEqual(
   resolveRepoLocalPath({ path: 'dev51/fe-xh' }, 'my-app', defaults, '/tmp/custom'),
-  path.resolve('/tmp/custom/my-app'),
-  'sync -d 仅覆盖未配置 directory 的旧 group'
+  path.resolve('/tmp/custom/dev51/fe-xh/my-app'),
+  'sync -d 覆盖相对 path 的本地根目录'
 );
 
 assertEqual(
-  resolveRepoLocalPath({ path: 'dev51/fe-xh', directory: 'dev51/fe-xh' }, 'my-app', defaults, '/tmp/custom'),
-  path.resolve(defaults.directory, 'dev51/fe-xh/my-app'),
-  'sync -d 不影响已配置 group.directory'
+  resolveRepoLocalPath({ path: '/abs/fe-xh' }, 'my-app', defaults, '/tmp/custom'),
+  path.resolve('/abs/fe-xh/my-app'),
+  'sync -d 不影响绝对 group.path'
+);
+
+// 旧配置中的 directory 字段应被忽略（解析只看 path）
+assertEqual(
+  resolveGroupDirectory({ path: 'dev51/fe-xh', directory: '/ignored' }, defaults),
+  path.resolve(defaults.directory, 'dev51/fe-xh'),
+  '忽略已废弃的 group.directory 字段'
 );
 
 const allDirs = getAllGroupDirectories(newConfig).sort();
@@ -142,12 +127,6 @@ assertEqual(
 assert(
   Boolean(findGroupByPath(newConfig, 'dev51/fe-xh')),
   'findGroupByPath 可找到 group 配置'
-);
-
-assertEqual(
-  resolveGroupDirectory(legacyConfig.gitlab.groups[0], legacyConfig.defaults),
-  path.resolve('../fe-xh'),
-  '旧 config 兼容: 无 directory 字段时使用 defaults.directory'
 );
 
 console.log('\n=== 集成测试: 多目录扫描 ===\n');
@@ -203,8 +182,15 @@ try {
     encoding: 'utf8'
   });
 
-  assert(configListOutput.includes('dev51/fe-xh → dev51/fe-xh'), 'config list 显示 group 目录映射');
-  assert(configListOutput.includes('dev51/xbb → dev51/xbb'), 'config list 显示第二个 group 映射');
+  // 用 endsWith 片段匹配，避免 macOS /var vs /private/var 符号链接差异
+  assert(
+    /dev51\/fe-xh → .+\/dev51\/fe-xh/.test(configListOutput),
+    'config list 显示 group 本地目录'
+  );
+  assert(
+    /dev51\/xbb → .+\/dev51\/xbb/.test(configListOutput),
+    'config list 显示第二个 group 本地目录'
+  );
 } catch (error) {
   failed += 1;
   console.error('✗ config list CLI 测试失败');

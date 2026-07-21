@@ -9,23 +9,20 @@ export interface GitProject {
 }
 
 /**
- * 解析 group 的本地根目录
- * - 相对 directory → resolve(defaults.directory, directory)
- * - 绝对 directory → resolve(directory)
- * - 未配置（旧配置）→ resolve(directoryOverride ?? defaults.directory)
+ * 解析 group 的本地根目录（由 group.path 推导）
+ * - 绝对 path → resolve(path)
+ * - 相对 path → resolve(directoryOverride ?? defaults.directory, path)
  */
 export function resolveGroupDirectory(
   group: GitLabGroup,
   defaults: Config['defaults'],
   directoryOverride?: string
 ): string {
-  if (group.directory !== undefined) {
-    if (path.isAbsolute(group.directory)) {
-      return path.resolve(group.directory);
-    }
-    return path.resolve(defaults.directory, group.directory);
+  if (path.isAbsolute(group.path)) {
+    return path.resolve(group.path);
   }
-  return path.resolve(directoryOverride ?? defaults.directory);
+  const base = directoryOverride ?? defaults.directory;
+  return path.resolve(base, group.path);
 }
 
 /**

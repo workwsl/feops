@@ -5,6 +5,17 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [2.1.0] - 2026-07-21
+
+### 变更（Breaking）
+
+- 废弃 `group.directory`：本地目录改由 `group.path` 推导
+  - 相对 `path` → `resolve(defaults.directory, path)`
+  - 绝对 `path` → `resolve(path)`
+- `sync -d` 改为临时覆盖本地根目录（相对 path 拼到 `-d` 下；绝对 path 不受影响）
+- `init` / `config add-group` 不再配置 per-group directory
+- 加载配置时忽略旧的 `group.directory` 字段
+
 ## [2.0.1] - 2026-07-21
 
 ### 修复

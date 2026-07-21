@@ -7,7 +7,6 @@ import * as os from 'os';
  */
 export interface GitLabGroup {
   path: string;
-  directory?: string;
   description?: string;
 }
 
@@ -96,14 +95,20 @@ export function loadConfig(): Config {
   try {
     const content = fs.readFileSync(configPath, 'utf8');
     const config = JSON.parse(content);
-    
-    // 合并默认配置,确保所有字段都存在
+
+    const groups: GitLabGroup[] = (config.gitlab?.groups || []).map((group: GitLabGroup & { directory?: string }) => {
+      const { directory: _ignored, ...rest } = group;
+      return rest;
+    });
+
+    // 合并默认配置,确保所有字段都存在；忽略已废弃的 group.directory
     return {
       ...DEFAULT_CONFIG,
       ...config,
       gitlab: {
         ...DEFAULT_CONFIG.gitlab,
-        ...config.gitlab
+        ...config.gitlab,
+        groups
       },
       defaults: {
         ...DEFAULT_CONFIG.defaults,

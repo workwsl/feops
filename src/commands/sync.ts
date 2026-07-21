@@ -30,7 +30,7 @@ interface CloneOrUpdateOptions {
 
 export const syncCommand = new Command('sync')
   .description('从 GitLab API 批量克隆或更新前端仓库')
-  .option('-d, --directory <dir>', '克隆目标目录（仅覆盖未配置 group.directory 的旧 group）')
+  .option('-d, --directory <dir>', '临时覆盖本地根目录（相对 group.path 拼到其下；绝对 path 不受影响）')
   .option('-g, --group <path>', '仅同步指定的 GitLab Group')
   .option('-b, --blacklist <repos...>', '临时黑名单仓库列表，多个仓库用空格分隔', [])
   .option('--dry-run', '预览模式，不实际执行克隆或更新操作')

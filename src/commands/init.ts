@@ -3,7 +3,6 @@ import chalk from 'chalk';
 import inquirer from 'inquirer';
 import * as fs from 'fs';
 import {
-  getConfigDir,
   getConfigPath,
   getBlacklistPath,
   configExists,
@@ -13,6 +12,7 @@ import {
   GitLabGroup
 } from '../config';
 import { GitLabService } from '../services/gitlab';
+import { resolveGroupDirectory } from '../utils/directories';
 
 export const initCommand = new Command('init')
   .description('初始化 feops 配置')
@@ -130,18 +130,8 @@ export const initCommand = new Command('init')
           }
         ]);
 
-        const { directory } = await inquirer.prompt([
-          {
-            type: 'input',
-            name: 'directory',
-            message: '本地目录:',
-            default: groupAnswers.groupPath
-          }
-        ]);
-
         groups.push({
           path: groupAnswers.groupPath,
-          directory: directory.trim() || groupAnswers.groupPath,
           description: description || undefined
         });
 
@@ -169,7 +159,7 @@ export const initCommand = new Command('init')
         {
           type: 'input',
           name: 'directory',
-          message: '默认克隆目录 (未配置 group.directory 时的 fallback):',
+          message: '本地根目录 (相对 group.path 会拼到其下):',
           default: '.'
         }
       ]);
@@ -236,10 +226,10 @@ export const initCommand = new Command('init')
       console.log(chalk.gray(`  GitLab URL: ${config.gitlab.url}`));
       console.log(chalk.gray(`  配置的 Groups: ${config.gitlab.groups.length} 个`));
       config.gitlab.groups.forEach((group, index) => {
-        const directoryInfo = group.directory ? ` → ${group.directory}` : '';
-        console.log(chalk.gray(`    ${index + 1}. ${group.path}${directoryInfo}${group.description ? ` - ${group.description}` : ''}`));
+        const localDir = resolveGroupDirectory(group, config.defaults);
+        console.log(chalk.gray(`    ${index + 1}. ${group.path} → ${localDir}${group.description ? ` - ${group.description}` : ''}`));
       });
-      console.log(chalk.gray(`  默认目录 (fallback): ${config.defaults.directory}`));
+      console.log(chalk.gray(`  本地根目录: ${config.defaults.directory}`));
       console.log(chalk.gray(`  默认分支: ${config.defaults.branch}`));
       console.log(chalk.gray(`  默认并发: ${config.defaults.parallel}`));
 
