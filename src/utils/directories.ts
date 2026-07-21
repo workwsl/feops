@@ -10,8 +10,9 @@ export interface GitProject {
 
 /**
  * 解析 group 的本地根目录
- * - 配置了 directory → resolve(directory)
- * - 未配置（旧配置）→ resolve(defaults.directory)
+ * - 相对 directory → resolve(defaults.directory, directory)
+ * - 绝对 directory → resolve(directory)
+ * - 未配置（旧配置）→ resolve(directoryOverride ?? defaults.directory)
  */
 export function resolveGroupDirectory(
   group: GitLabGroup,
@@ -19,7 +20,10 @@ export function resolveGroupDirectory(
   directoryOverride?: string
 ): string {
   if (group.directory !== undefined) {
-    return path.resolve(group.directory);
+    if (path.isAbsolute(group.directory)) {
+      return path.resolve(group.directory);
+    }
+    return path.resolve(defaults.directory, group.directory);
   }
   return path.resolve(directoryOverride ?? defaults.directory);
 }

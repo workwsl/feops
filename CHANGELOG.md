@@ -5,6 +5,13 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [2.0.1] - 2026-07-21
+
+### 修复
+
+- 相对路径的 `group.directory` 改为拼接到 `defaults.directory`，不再依赖执行时的 cwd
+- 绝对路径的 `group.directory` 仍直接使用自身路径
+
 ## [2.0.0] - 2026-06-26
 
 ### 新增

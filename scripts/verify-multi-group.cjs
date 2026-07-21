@@ -71,8 +71,14 @@ console.log('=== 单元测试: 目录解析 ===\n');
 
 assertEqual(
   resolveGroupDirectory({ path: 'dev51/fe-xh', directory: 'dev51/fe-xh' }, defaults),
-  path.resolve('dev51/fe-xh'),
-  '新配置 group 使用 group.directory'
+  path.resolve(defaults.directory, 'dev51/fe-xh'),
+  '相对 directory 拼接到 defaults.directory'
+);
+
+assertEqual(
+  resolveGroupDirectory({ path: 'dev51/fe-xh', directory: '/abs/fe-xh' }, defaults),
+  path.resolve('/abs/fe-xh'),
+  '绝对 directory 直接使用自身路径'
 );
 
 assertEqual(
@@ -83,8 +89,8 @@ assertEqual(
 
 assertEqual(
   resolveRepoLocalPath({ path: 'dev51/fe-xh', directory: 'dev51/fe-xh' }, 'my-app', defaults),
-  path.resolve('dev51/fe-xh/my-app'),
-  '新配置 repo 路径 = directory/repo-name'
+  path.resolve(defaults.directory, 'dev51/fe-xh/my-app'),
+  '新配置 repo 路径 = defaults.directory/directory/repo-name'
 );
 
 assertEqual(
@@ -101,14 +107,17 @@ assertEqual(
 
 assertEqual(
   resolveRepoLocalPath({ path: 'dev51/fe-xh', directory: 'dev51/fe-xh' }, 'my-app', defaults, '/tmp/custom'),
-  path.resolve('dev51/fe-xh/my-app'),
+  path.resolve(defaults.directory, 'dev51/fe-xh/my-app'),
   'sync -d 不影响已配置 group.directory'
 );
 
 const allDirs = getAllGroupDirectories(newConfig).sort();
 assertEqual(
   JSON.stringify(allDirs),
-  JSON.stringify([path.resolve('dev51/fe-xh'), path.resolve('dev51/xbb')].sort()),
+  JSON.stringify([
+    path.resolve(newConfig.defaults.directory, 'dev51/fe-xh'),
+    path.resolve(newConfig.defaults.directory, 'dev51/xbb')
+  ].sort()),
   'getAllGroupDirectories 返回所有 group 目录'
 );
 

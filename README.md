@@ -207,7 +207,9 @@ dev51/fe-xh/<repo-name>/
 dev51/xbb/<repo-name>/
 ```
 
-**兼容说明：**
+**目录解析规则：**
+- `directory` 为相对路径时，拼接到 `defaults.directory`（与执行时 cwd 无关）
+- `directory` 为绝对路径时，直接使用该路径
 - 旧配置中 group 未设置 `directory` 时，该 group 的仓库仍写入 `defaults.directory/<repo-name>`
 - `sync -d` 仅覆盖未配置 `group.directory` 的旧 group
 - `branch` / `merged` / `into` / `uptodate` 未指定 `-d` 时，会自动扫描所有 group 目录
