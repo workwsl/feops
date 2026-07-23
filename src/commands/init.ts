@@ -44,7 +44,6 @@ export const initCommand = new Command('init')
           type: 'input',
           name: 'gitlabUrl',
           message: 'GitLab 服务器地址:',
-          default: 'http://gitcode.tongdao.cn',
           validate: (input: string) => {
             if (!input.trim()) {
               return '请输入 GitLab 服务器地址';

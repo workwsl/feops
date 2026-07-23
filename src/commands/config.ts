@@ -186,7 +186,7 @@ configCommand
 configCommand
   .command('add-group')
   .description('添加 GitLab Group')
-  .argument('<path>', 'Group 路径 (如: dev51/fe-xh)')
+  .argument('<path>', 'Group 路径 (如: my-org/frontend)')
   .option('-d, --description <desc>', 'Group 描述')
   .action(async (groupPath: string, options) => {
     if (!configExists()) {

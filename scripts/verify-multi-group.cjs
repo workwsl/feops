@@ -35,18 +35,18 @@ function assertEqual(actual, expected, message) {
 }
 
 const defaults = {
-  directory: '../fe-xh',
+  directory: '../repos',
   branch: 'master',
   parallel: 3
 };
 
 const newConfig = {
   gitlab: {
-    url: 'http://gitcode.example.com',
+    url: 'http://gitlab.example.com',
     token: 'test-token',
     groups: [
-      { path: 'dev51/fe-xh', description: 'xh' },
-      { path: 'dev51/xbb', description: 'xbb' }
+      { path: 'my-org/frontend', description: 'frontend' },
+      { path: 'my-org/mobile', description: 'mobile' }
     ]
   },
   blacklist: [],
@@ -60,39 +60,39 @@ const newConfig = {
 console.log('=== 单元测试: 目录解析 ===\n');
 
 assertEqual(
-  resolveGroupDirectory({ path: 'dev51/fe-xh' }, defaults),
-  path.resolve(defaults.directory, 'dev51/fe-xh'),
+  resolveGroupDirectory({ path: 'my-org/frontend' }, defaults),
+  path.resolve(defaults.directory, 'my-org/frontend'),
   '相对 path 拼接到 defaults.directory'
 );
 
 assertEqual(
-  resolveGroupDirectory({ path: '/abs/fe-xh' }, defaults),
-  path.resolve('/abs/fe-xh'),
+  resolveGroupDirectory({ path: '/abs/group-a' }, defaults),
+  path.resolve('/abs/group-a'),
   '绝对 path 直接使用自身路径'
 );
 
 assertEqual(
-  resolveRepoLocalPath({ path: 'dev51/fe-xh' }, 'my-app', defaults),
-  path.resolve(defaults.directory, 'dev51/fe-xh/my-app'),
+  resolveRepoLocalPath({ path: 'my-org/frontend' }, 'my-app', defaults),
+  path.resolve(defaults.directory, 'my-org/frontend/my-app'),
   'repo 路径 = defaults.directory/group.path/repo-name'
 );
 
 assertEqual(
-  resolveRepoLocalPath({ path: 'dev51/fe-xh' }, 'my-app', defaults, '/tmp/custom'),
-  path.resolve('/tmp/custom/dev51/fe-xh/my-app'),
+  resolveRepoLocalPath({ path: 'my-org/frontend' }, 'my-app', defaults, '/tmp/custom'),
+  path.resolve('/tmp/custom/my-org/frontend/my-app'),
   'sync -d 覆盖相对 path 的本地根目录'
 );
 
 assertEqual(
-  resolveRepoLocalPath({ path: '/abs/fe-xh' }, 'my-app', defaults, '/tmp/custom'),
-  path.resolve('/abs/fe-xh/my-app'),
+  resolveRepoLocalPath({ path: '/abs/group-a' }, 'my-app', defaults, '/tmp/custom'),
+  path.resolve('/abs/group-a/my-app'),
   'sync -d 不影响绝对 group.path'
 );
 
 // 旧配置中的 directory 字段应被忽略（解析只看 path）
 assertEqual(
-  resolveGroupDirectory({ path: 'dev51/fe-xh', directory: '/ignored' }, defaults),
-  path.resolve(defaults.directory, 'dev51/fe-xh'),
+  resolveGroupDirectory({ path: 'my-org/frontend', directory: '/ignored' }, defaults),
+  path.resolve(defaults.directory, 'my-org/frontend'),
   '忽略已废弃的 group.directory 字段'
 );
 
@@ -100,14 +100,14 @@ const allDirs = getAllGroupDirectories(newConfig).sort();
 assertEqual(
   JSON.stringify(allDirs),
   JSON.stringify([
-    path.resolve(newConfig.defaults.directory, 'dev51/fe-xh'),
-    path.resolve(newConfig.defaults.directory, 'dev51/xbb')
+    path.resolve(newConfig.defaults.directory, 'my-org/frontend'),
+    path.resolve(newConfig.defaults.directory, 'my-org/mobile')
   ].sort()),
   'getAllGroupDirectories 返回所有 group 目录'
 );
 
 assertEqual(
-  getAllGroupDirectories(newConfig, { groupPath: 'dev51/xbb' }).length,
+  getAllGroupDirectories(newConfig, { groupPath: 'my-org/mobile' }).length,
   1,
   'getAllGroupDirectories 支持 group 过滤'
 );
@@ -125,7 +125,7 @@ assertEqual(
 );
 
 assert(
-  Boolean(findGroupByPath(newConfig, 'dev51/fe-xh')),
+  Boolean(findGroupByPath(newConfig, 'my-org/frontend')),
   'findGroupByPath 可找到 group 配置'
 );
 
@@ -144,8 +144,8 @@ function createFakeRepo(groupDir, repoName) {
   return repoPath;
 }
 
-createFakeRepo('dev51/fe-xh', 'repo-a');
-createFakeRepo('dev51/xbb', 'repo-b');
+createFakeRepo('my-org/frontend', 'repo-a');
+createFakeRepo('my-org/mobile', 'repo-b');
 
 const integrationConfig = JSON.parse(JSON.stringify(newConfig));
 fs.writeFileSync(
@@ -158,15 +158,15 @@ process.chdir(workDir);
 const scannedProjects = scanAllGitProjects(integrationConfig);
 assertEqual(scannedProjects.length, 2, 'scanAllGitProjects 扫描两个 group 目录');
 assert(
-  scannedProjects.some(project => project.name === 'repo-a' && project.path.endsWith(`${path.sep}dev51${path.sep}fe-xh${path.sep}repo-a`)),
-  'scanAllGitProjects 找到 dev51/fe-xh/repo-a'
+  scannedProjects.some(project => project.name === 'repo-a' && project.path.endsWith(`${path.sep}my-org${path.sep}frontend${path.sep}repo-a`)),
+  'scanAllGitProjects 找到 my-org/frontend/repo-a'
 );
 assert(
-  scannedProjects.some(project => project.name === 'repo-b' && project.path.endsWith(`${path.sep}dev51${path.sep}xbb${path.sep}repo-b`)),
-  'scanAllGitProjects 找到 dev51/xbb/repo-b'
+  scannedProjects.some(project => project.name === 'repo-b' && project.path.endsWith(`${path.sep}my-org${path.sep}mobile${path.sep}repo-b`)),
+  'scanAllGitProjects 找到 my-org/mobile/repo-b'
 );
 
-const filteredProjects = scanAllGitProjects(integrationConfig, { group: 'dev51/xbb' });
+const filteredProjects = scanAllGitProjects(integrationConfig, { group: 'my-org/mobile' });
 assertEqual(filteredProjects.length, 1, 'scanAllGitProjects --group 仅扫描指定 group');
 assertEqual(filteredProjects[0]?.name, 'repo-b', 'scanAllGitProjects --group 返回正确项目');
 
@@ -184,11 +184,11 @@ try {
 
   // 用 endsWith 片段匹配，避免 macOS /var vs /private/var 符号链接差异
   assert(
-    /dev51\/fe-xh → .+\/dev51\/fe-xh/.test(configListOutput),
+    /my-org\/frontend → .+\/my-org\/frontend/.test(configListOutput),
     'config list 显示 group 本地目录'
   );
   assert(
-    /dev51\/xbb → .+\/dev51\/xbb/.test(configListOutput),
+    /my-org\/mobile → .+\/my-org\/mobile/.test(configListOutput),
     'config list 显示第二个 group 本地目录'
   );
 } catch (error) {

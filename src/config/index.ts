@@ -38,7 +38,7 @@ const DEFAULT_CONFIG: Config = {
   },
   blacklist: [],
   defaults: {
-    directory: '../fe-xh',
+    directory: '../repos',
     branch: 'master',
     parallel: 5
   }

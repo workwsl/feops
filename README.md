@@ -51,7 +51,7 @@ feops init
 feops sync
 
 # 仅同步指定 Group
-feops sync --group dev51/fe-xh
+feops sync --group my-org/frontend
 
 # 预览模式，查看将要执行的操作
 feops sync --dry-run
@@ -146,13 +146,13 @@ feops config set defaults.branch main
 ### 管理 Group
 ```bash
 # 添加 Group（本地目录由 group.path 拼到 defaults.directory 下）
-feops config add-group dev51/fe-xh -d "前端仓库组"
+feops config add-group my-org/frontend -d "前端仓库组"
 
 # 添加另一个 Group
-feops config add-group dev51/xbb -d "xbb 仓库组"
+feops config add-group my-org/mobile -d "移动端仓库组"
 
 # 移除 Group
-feops config remove-group dev51/fe-xh
+feops config remove-group my-org/frontend
 ```
 
 ### 编辑黑名单
@@ -174,16 +174,16 @@ vim ~/.feops/blacklist.txt
 ```json
 {
   "gitlab": {
-    "url": "http://gitcode.example.com",
+    "url": "http://gitlab.example.com",
     "token": "your-gitlab-token",
     "groups": [
       {
-        "path": "dev51/fe-xh",
-        "description": "前端 xh 组"
+        "path": "my-org/frontend",
+        "description": "前端仓库组"
       },
       {
-        "path": "dev51/xbb",
-        "description": "xbb 组"
+        "path": "my-org/mobile",
+        "description": "移动端仓库组"
       }
     ]
   },
@@ -201,8 +201,8 @@ vim ~/.feops/blacklist.txt
 本地目录由 `group.path` 推导，sync 后目录结构如下（`defaults.directory` 为 `.` 时）：
 
 ```
-dev51/fe-xh/<repo-name>/
-dev51/xbb/<repo-name>/
+my-org/frontend/<repo-name>/
+my-org/mobile/<repo-name>/
 ```
 
 **目录解析规则：**

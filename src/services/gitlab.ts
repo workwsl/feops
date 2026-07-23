@@ -1,7 +1,7 @@
-import * as https from 'https';
-import * as http from 'http';
-import { URL } from 'url';
-import { loadConfig, GitLabGroup } from '../config';
+import * as https from "https";
+import * as http from "http";
+import { URL } from "url";
+import { loadConfig, GitLabGroup } from "../config";
 
 /**
  * GitLab 项目接口
@@ -47,7 +47,7 @@ export class GitLabService {
   private token: string;
 
   constructor(baseUrl: string, token: string) {
-    this.baseUrl = baseUrl.replace(/\/$/, ''); // 移除末尾的斜杠
+    this.baseUrl = baseUrl.replace(/\/$/, ""); // 移除末尾的斜杠
     this.token = token;
   }
 
@@ -64,7 +64,7 @@ export class GitLabService {
    */
   private async request(endpoint: string): Promise<any> {
     const url = new URL(`${this.baseUrl}${endpoint}`);
-    const isHttps = url.protocol === 'https:';
+    const isHttps = url.protocol === "https:";
     const httpModule = isHttps ? https : http;
 
     return new Promise((resolve, reject) => {
@@ -72,34 +72,42 @@ export class GitLabService {
         hostname: url.hostname,
         port: url.port || (isHttps ? 443 : 80),
         path: url.pathname + url.search,
-        method: 'GET',
+        method: "GET",
         headers: {
-          'PRIVATE-TOKEN': this.token,
-          'Content-Type': 'application/json'
-        }
+          "PRIVATE-TOKEN": this.token,
+          "Content-Type": "application/json",
+        },
       };
 
       const req = httpModule.request(options, (res) => {
-        let data = '';
+        let data = "";
 
-        res.on('data', (chunk) => {
+        res.on("data", (chunk) => {
           data += chunk;
         });
 
-        res.on('end', () => {
+        res.on("end", () => {
           if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
             try {
               resolve(JSON.parse(data));
             } catch (error) {
-              reject(new Error(`解析响应失败: ${error instanceof Error ? error.message : String(error)}`));
+              reject(
+                new Error(
+                  `解析响应失败: ${error instanceof Error ? error.message : String(error)}`,
+                ),
+              );
             }
           } else {
-            reject(new Error(`请求失败: ${res.statusCode} ${res.statusMessage}\n${data}`));
+            reject(
+              new Error(
+                `请求失败: ${res.statusCode} ${res.statusMessage}\n${data}`,
+              ),
+            );
           }
         });
       });
 
-      req.on('error', (error) => {
+      req.on("error", (error) => {
         reject(new Error(`网络请求失败: ${error.message}`));
       });
 
@@ -126,29 +134,33 @@ export class GitLabService {
 
     while (true) {
       const endpoint = `/api/v4/groups/${encodedPath}/projects?include_subgroups=true&per_page=${perPage}&page=${page}`;
-      
+
       try {
         const projects: GitLabProject[] = await this.request(endpoint);
-        
+
         if (projects.length === 0) {
           break;
         }
-        
+
         allProjects.push(...projects);
-        
+
         // 如果返回的项目数少于每页数量,说明已经是最后一页
         if (projects.length < perPage) {
           break;
         }
-        
+
         page++;
       } catch (error) {
-        throw new Error(`获取 Group "${groupPath}" 的项目失败: ${error instanceof Error ? error.message : String(error)}`);
+        throw new Error(
+          `获取 Group "${groupPath}" 的项目失败: ${error instanceof Error ? error.message : String(error)}`,
+        );
       }
     }
 
     // 转换为 Repository 格式
-    return allProjects.map(project => this.convertToRepository(project, groupPath));
+    return allProjects.map((project) =>
+      this.convertToRepository(project, groupPath),
+    );
   }
 
   /**
@@ -157,7 +169,7 @@ export class GitLabService {
   async fetchProjectsByGroup(groupPath?: string): Promise<GroupProjects[]> {
     const config = loadConfig();
     const groups = groupPath
-      ? config.gitlab.groups.filter(g => g.path === groupPath)
+      ? config.gitlab.groups.filter((g) => g.path === groupPath)
       : config.gitlab.groups;
 
     if (groupPath && groups.length === 0) {
@@ -172,16 +184,18 @@ export class GitLabService {
         const repos = await this.fetchProjects(group.path);
         results.push({ group, repos });
       } catch (error) {
-        errors.push(`Group "${group.path}": ${error instanceof Error ? error.message : String(error)}`);
+        errors.push(
+          `Group "${group.path}": ${error instanceof Error ? error.message : String(error)}`,
+        );
       }
     }
 
     if (errors.length > 0 && results.length === 0) {
-      throw new Error(`获取所有 Group 的项目都失败了:\n${errors.join('\n')}`);
+      throw new Error(`获取所有 Group 的项目都失败了:\n${errors.join("\n")}`);
     }
 
     if (errors.length > 0) {
-      console.warn(`部分 Group 获取失败:\n${errors.join('\n')}`);
+      console.warn(`部分 Group 获取失败:\n${errors.join("\n")}`);
     }
 
     return results;
@@ -192,11 +206,11 @@ export class GitLabService {
    */
   async fetchAllConfiguredProjects(): Promise<Repository[]> {
     const groupProjects = await this.fetchProjectsByGroup();
-    const allRepositories = groupProjects.flatMap(item => item.repos);
+    const allRepositories = groupProjects.flatMap((item) => item.repos);
 
     // 按 full_name 去重，避免同一项目出现在多个 group 时重复
     const uniqueRepos = Array.from(
-      new Map(allRepositories.map(repo => [repo.full_name, repo])).values()
+      new Map(allRepositories.map((repo) => [repo.full_name, repo])).values(),
     );
 
     return uniqueRepos;
@@ -205,14 +219,16 @@ export class GitLabService {
   /**
    * 验证 Token 和 Group 是否有效
    */
-  async validateConfig(groupPath: string): Promise<{ valid: boolean; error?: string }> {
+  async validateConfig(
+    groupPath: string,
+  ): Promise<{ valid: boolean; error?: string }> {
     try {
       await this.getGroup(groupPath);
       return { valid: true };
     } catch (error) {
       return {
         valid: false,
-        error: error instanceof Error ? error.message : String(error)
+        error: error instanceof Error ? error.message : String(error),
       };
     }
   }
@@ -220,25 +236,27 @@ export class GitLabService {
   /**
    * 转换 GitLab 项目为 Repository 格式
    */
-  private convertToRepository(project: GitLabProject, groupPath: string): Repository {
+  private convertToRepository(
+    project: GitLabProject,
+    groupPath: string,
+  ): Repository {
     // 从 http_url_to_repo 中提取 relative_path
-    // 例如: http://gitcode.tongdao.cn/dev51/fe-xh/fe-xxrlwx2c-mp.git
-    // 提取: /dev51/fe-xh/fe-xxrlwx2c-mp
+    // 例如: http://gitlab.example.com/my-org/frontend/my-app.git
+    // 提取: /my-org/frontend/my-app
     let relativePath = project.path_with_namespace;
-    if (relativePath && !relativePath.startsWith('/')) {
-      relativePath = '/' + relativePath;
+    if (relativePath && !relativePath.startsWith("/")) {
+      relativePath = "/" + relativePath;
     }
 
     return {
       id: project.id,
       name: project.name,
-      description: project.description || '',
+      description: project.description || "",
       relative_path: relativePath,
       full_name: project.path_with_namespace,
       visibility: project.visibility,
       archived: project.archived,
-      group_path: groupPath
+      group_path: groupPath,
     };
   }
 }
-
