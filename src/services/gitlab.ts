@@ -31,12 +31,22 @@ export interface Repository {
   full_name: string;
   visibility: string;
   archived: boolean;
+  /** 配置中用于查询该项目的根 Group */
   group_path: string;
+  /** 项目相对配置 Group 的路径，可能包含子组目录 */
+  group_relative_path: string;
 }
 
 export interface GroupProjects {
   group: GitLabGroup;
   repos: Repository[];
+}
+
+/** 按完整 GitLab 命名空间去除来自重叠 Group 的重复项目。 */
+export function deduplicateRepositories(repositories: Repository[]): Repository[] {
+  return Array.from(
+    new Map(repositories.map((repo) => [repo.full_name, repo])).values(),
+  );
 }
 
 /**
@@ -209,11 +219,7 @@ export class GitLabService {
     const allRepositories = groupProjects.flatMap((item) => item.repos);
 
     // 按 full_name 去重，避免同一项目出现在多个 group 时重复
-    const uniqueRepos = Array.from(
-      new Map(allRepositories.map((repo) => [repo.full_name, repo])).values(),
-    );
-
-    return uniqueRepos;
+    return deduplicateRepositories(allRepositories);
   }
 
   /**
@@ -257,6 +263,38 @@ export class GitLabService {
       visibility: project.visibility,
       archived: project.archived,
       group_path: groupPath,
+      group_relative_path: getProjectPathWithinGroup(
+        project.path_with_namespace,
+        groupPath,
+      ),
     };
   }
+}
+
+/**
+ * 返回项目相对已配置 Group 的路径。
+ *
+ * 例如，`my-org/frontend/web/app` 位于 `my-org/frontend` 下时，
+ * 返回 `web/app`；直属项目则返回项目名。
+ */
+export function getProjectPathWithinGroup(
+  projectPath: string,
+  groupPath: string,
+): string {
+  const normalizedProjectPath = projectPath.replace(/^\/+|\/+$/g, "");
+  const normalizedGroupPath = groupPath.replace(/^\/+|\/+$/g, "");
+  const prefix = `${normalizedGroupPath}/`;
+
+  if (!normalizedProjectPath.startsWith(prefix)) {
+    throw new Error(
+      `项目 "${projectPath}" 不属于 Group "${groupPath}"`,
+    );
+  }
+
+  const relativePath = normalizedProjectPath.slice(prefix.length);
+  if (!relativePath || relativePath.split("/").some((part) => part === "." || part === "..")) {
+    throw new Error(`项目路径无效: ${projectPath}`);
+  }
+
+  return relativePath;
 }

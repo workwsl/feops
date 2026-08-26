@@ -13,6 +13,10 @@ const {
   scanAllGitProjects,
   findGroupByPath
 } = require('../dist/utils/directories');
+const {
+  deduplicateRepositories,
+  getProjectPathWithinGroup
+} = require('../dist/services/gitlab');
 
 const projectRoot = path.resolve(__dirname, '..');
 
@@ -84,6 +88,35 @@ assertEqual(
 );
 
 assertEqual(
+  resolveRepoLocalPath({ path: 'my-org/frontend' }, 'web/admin', defaults),
+  path.resolve(defaults.directory, 'my-org/frontend/web/admin'),
+  '子组 repo 路径镜像到 group 本地目录'
+);
+
+assertEqual(
+  getProjectPathWithinGroup('my-org/frontend/web/admin', 'my-org/frontend'),
+  'web/admin',
+  '从完整命名空间提取子组 repo 相对路径'
+);
+
+assertEqual(
+  getProjectPathWithinGroup('my-org/frontend/app', 'my-org/frontend'),
+  'app',
+  '直属 repo 保持项目名作为相对路径'
+);
+
+const reposWithOverlappingGroups = [
+  { full_name: 'my-org/frontend/app', group_path: 'my-org/frontend', group_relative_path: 'app' },
+  { full_name: 'my-org/frontend/web/admin', group_path: 'my-org/frontend', group_relative_path: 'web/admin' },
+  { full_name: 'my-org/frontend/web/admin', group_path: 'my-org/frontend/web', group_relative_path: 'admin' }
+];
+assertEqual(
+  deduplicateRepositories(reposWithOverlappingGroups).length,
+  2,
+  '重叠配置 Group 返回的同一项目只处理一次'
+);
+
+assertEqual(
   resolveRepoLocalPath({ path: '/abs/group-a' }, 'my-app', defaults, '/tmp/custom'),
   path.resolve('/abs/group-a/my-app'),
   'sync -d 不影响绝对 group.path'
@@ -146,6 +179,11 @@ function createFakeRepo(groupDir, repoName) {
 
 createFakeRepo('my-org/frontend', 'repo-a');
 createFakeRepo('my-org/mobile', 'repo-b');
+createFakeRepo('my-org/frontend/web', 'repo-a');
+createFakeRepo('my-org/frontend/web/admin', 'repo-c');
+
+const symlinkTarget = path.join(workDir, 'my-org/frontend/web');
+fs.symlinkSync(symlinkTarget, path.join(workDir, 'my-org/frontend/web-link'));
 
 const integrationConfig = JSON.parse(JSON.stringify(newConfig));
 fs.writeFileSync(
@@ -156,7 +194,7 @@ fs.writeFileSync(
 process.chdir(workDir);
 
 const scannedProjects = scanAllGitProjects(integrationConfig);
-assertEqual(scannedProjects.length, 2, 'scanAllGitProjects 扫描两个 group 目录');
+assertEqual(scannedProjects.length, 4, 'scanAllGitProjects 递归扫描两个 group 目录');
 assert(
   scannedProjects.some(project => project.name === 'repo-a' && project.path.endsWith(`${path.sep}my-org${path.sep}frontend${path.sep}repo-a`)),
   'scanAllGitProjects 找到 my-org/frontend/repo-a'
@@ -165,10 +203,26 @@ assert(
   scannedProjects.some(project => project.name === 'repo-b' && project.path.endsWith(`${path.sep}my-org${path.sep}mobile${path.sep}repo-b`)),
   'scanAllGitProjects 找到 my-org/mobile/repo-b'
 );
+assert(
+  scannedProjects.some(project => project.name === 'repo-a' && project.path.endsWith(`${path.sep}my-org${path.sep}frontend${path.sep}web${path.sep}repo-a`)),
+  'scanAllGitProjects 找到子组中与根组同名的 repo'
+);
+assert(
+  scannedProjects.some(project => project.name === 'repo-c' && project.path.endsWith(`${path.sep}my-org${path.sep}frontend${path.sep}web${path.sep}admin${path.sep}repo-c`)),
+  'scanAllGitProjects 找到多级子组 repo'
+);
+assertEqual(
+  scannedProjects.filter(project => project.name === 'repo-a').length,
+  2,
+  '子组与根组的同名 repo 均被保留'
+);
 
 const filteredProjects = scanAllGitProjects(integrationConfig, { group: 'my-org/mobile' });
 assertEqual(filteredProjects.length, 1, 'scanAllGitProjects --group 仅扫描指定 group');
 assertEqual(filteredProjects[0]?.name, 'repo-b', 'scanAllGitProjects --group 返回正确项目');
+
+const nestedFilteredProjects = scanAllGitProjects(integrationConfig, { group: 'my-org/frontend' });
+assertEqual(nestedFilteredProjects.length, 3, 'scanAllGitProjects --group 递归扫描子组');
 
 console.log('\n=== CLI 集成测试: config list / branch ===\n');
 
@@ -205,14 +259,14 @@ try {
   });
 
   assert(
-    branchOutput.includes('找到 2 个 Git 项目') || branchOutput.includes('总项目数: 2'),
-    'branch CLI 扫描多个 group 目录'
+    branchOutput.includes('找到 4 个 Git 项目') || branchOutput.includes('总项目数: 4'),
+    'branch CLI 递归扫描多个 group 目录'
   );
 } catch (error) {
   const output = `${error.stdout || ''}${error.stderr || ''}`;
-  if (output.includes('找到 2 个 Git 项目') || output.includes('总项目数: 2')) {
+  if (output.includes('找到 4 个 Git 项目') || output.includes('总项目数: 4')) {
     passed += 1;
-    console.log('✓ branch CLI 扫描多个 group 目录');
+    console.log('✓ branch CLI 递归扫描多个 group 目录');
   } else {
     failed += 1;
     console.error('✗ branch CLI 测试失败');

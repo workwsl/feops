@@ -30,12 +30,12 @@ export function resolveGroupDirectory(
  */
 export function resolveRepoLocalPath(
   group: GitLabGroup,
-  repoName: string,
+  repoRelativePath: string,
   defaults: Config['defaults'],
   directoryOverride?: string
 ): string {
   const groupDir = resolveGroupDirectory(group, defaults, directoryOverride);
-  return path.join(groupDir, repoName);
+  return path.join(groupDir, repoRelativePath);
 }
 
 /**
@@ -88,21 +88,42 @@ export function scanGitProjectsInDirectory(dir: string, groupPath?: string): Git
     return [];
   }
 
-  return fs.readdirSync(dir)
-    .filter(item => {
-      const itemPath = path.join(dir, item);
-      return fs.statSync(itemPath).isDirectory() && fs.existsSync(path.join(itemPath, '.git'));
-    })
-    .map(name => {
-      const project: GitProject = {
-        name,
-        path: path.join(dir, name)
-      };
-      if (groupPath) {
-        project.groupPath = groupPath;
+  const projects: GitProject[] = [];
+
+  const scanDirectory = (currentDir: string): void => {
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(currentDir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
+    for (const entry of entries) {
+      // 不跟随符号链接，避免循环或扫描 group 目录外的仓库。
+      if (entry.name === '.git' || entry.isSymbolicLink() || !entry.isDirectory()) {
+        continue;
       }
-      return project;
-    });
+
+      const entryPath = path.join(currentDir, entry.name);
+      if (fs.existsSync(path.join(entryPath, '.git'))) {
+        const project: GitProject = {
+          name: entry.name,
+          path: entryPath
+        };
+        if (groupPath) {
+          project.groupPath = groupPath;
+        }
+        projects.push(project);
+        // 已进入 Git 仓库根目录，不递归扫描其内部目录。
+        continue;
+      }
+
+      scanDirectory(entryPath);
+    }
+  };
+
+  scanDirectory(dir);
+  return projects;
 }
 
 /**

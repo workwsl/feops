@@ -5,6 +5,17 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [2.2.0] - 2026-08-26
+
+### 新增
+
+- `sync` 递归同步配置 Group 下的所有子组项目，并按 GitLab 命名空间镜像本地目录
+- `branch` / `merged` / `into` / `uptodate` 递归扫描子组中的本地 Git 仓库
+
+### 改进
+
+- 父子 Group 同时配置时，按完整项目命名空间去重，避免重复同步
+
 ## [2.1.0] - 2026-07-21
 
 ### 变更（Breaking）
@@ -117,4 +128,3 @@
 
 - [GitHub 仓库](https://github.com/workwsl/feops)
 - [npm 包](https://www.npmjs.com/package/@wangxyu/feops)
-

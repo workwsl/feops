@@ -5,7 +5,7 @@ import * as path from 'path';
 import { spawn } from 'child_process';
 import Table from 'cli-table3';
 import { loadConfig, loadBlacklist, configExists } from '../config';
-import { GitLabService } from '../services/gitlab';
+import { deduplicateRepositories, GitLabService } from '../services/gitlab';
 import { findGroupByPath, resolveRepoLocalPath, getAllGroupDirectories } from '../utils/directories';
 
 interface CloneOrUpdateResult {
@@ -68,7 +68,7 @@ export const syncCommand = new Command('sync')
       // 从 GitLab API 获取仓库列表
       const gitlabService = GitLabService.fromConfig();
       const groupProjects = await gitlabService.fetchProjectsByGroup(options.group);
-      const repositories = groupProjects.flatMap(item => item.repos);
+      const repositories = deduplicateRepositories(groupProjects.flatMap(item => item.repos));
       
       console.log(chalk.gray(`找到 ${repositories.length} 个仓库`));
       
@@ -102,7 +102,12 @@ export const syncCommand = new Command('sync')
         }
 
         const gitUrl = `${gitUrlBase}${repo.relative_path}.git`;
-        const localPath = resolveRepoLocalPath(group, repo.name, config.defaults, directoryOverride);
+        const localPath = resolveRepoLocalPath(
+          group,
+          repo.group_relative_path,
+          config.defaults,
+          directoryOverride
+        );
         
         return {
           ...repo,
@@ -263,6 +268,7 @@ async function processRepository(repo: any, options: CloneOrUpdateOptions): Prom
     if (!repo.exists) {
       // 克隆新仓库
       console.log(chalk.blue(`🔄 克隆仓库: ${repo.name}`));
+      fs.mkdirSync(path.dirname(repo.localPath), { recursive: true });
       await executeGitCommand(['clone', repo.gitUrl, repo.localPath]);
       
       const duration = Date.now() - startTime;

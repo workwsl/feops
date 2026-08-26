@@ -205,12 +205,18 @@ my-org/frontend/<repo-name>/
 my-org/mobile/<repo-name>/
 ```
 
+配置的 Group 包含子组时，`sync` 会递归拉取所有子组项目，并镜像 GitLab 的子组目录。例如配置 `my-org/frontend` 后，GitLab 项目 `my-org/frontend/web/admin` 会克隆到：
+
+```
+my-org/frontend/web/admin/
+```
+
 **目录解析规则：**
 - `group.path` 为相对路径时，拼接到 `defaults.directory`（与执行时 cwd 无关）
 - `group.path` 为绝对路径时，直接使用该路径（日常仍应配置相对 GitLab Group 路径）
 - `group.directory` 已废弃，加载配置时忽略
 - `sync -d` 临时覆盖本地根目录（相对 path 拼到 `-d` 下；绝对 path 不受影响）
-- `branch` / `merged` / `into` / `uptodate` 未指定 `-d` 时，会自动扫描所有 group 目录
+- `branch` / `merged` / `into` / `uptodate` 未指定 `-d` 时，会递归扫描所有 group 目录
 
 ### 黑名单文件格式
 ```
