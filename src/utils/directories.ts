@@ -9,15 +9,25 @@ export interface GitProject {
 }
 
 /**
- * 解析 group 的本地根目录（由 group.path 推导）
- * - 绝对 path → resolve(path)
- * - 相对 path → resolve(directoryOverride ?? defaults.directory, path)
+ * 解析 group 的本地根目录
+ * - 有 directory 且为绝对路径 → resolve(directory)（不受 sync -d 影响）
+ * - 有 directory 且为相对路径 → resolve(directoryOverride ?? defaults.directory, directory)
+ * - 无 directory：绝对 path → resolve(path)；相对 path → resolve(base, path)
  */
 export function resolveGroupDirectory(
   group: GitLabGroup,
   defaults: Config['defaults'],
   directoryOverride?: string
 ): string {
+  const configured = group.directory?.trim();
+  if (configured) {
+    if (path.isAbsolute(configured)) {
+      return path.resolve(configured);
+    }
+    const base = directoryOverride ?? defaults.directory;
+    return path.resolve(base, configured);
+  }
+
   if (path.isAbsolute(group.path)) {
     return path.resolve(group.path);
   }

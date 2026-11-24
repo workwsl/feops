@@ -5,6 +5,17 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [2.3.0] - 2026-11-24
+
+### 新增
+
+- 恢复 `group.directory`：可为每个 Group 指定本地目录，多个 Group 可共用同一目录
+- `init` / `config add-group --directory` 支持配置本地目录
+
+### 变更
+
+- 未设置 `group.directory` 时，本地目录仍由 `group.path` 推导
+
 ## [2.2.0] - 2026-08-26
 
 ### 新增

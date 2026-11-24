@@ -38,8 +38,8 @@ feops init
 该命令会引导你完成以下配置：
 - GitLab 服务器地址
 - GitLab Access Token
-- GitLab Group 路径（支持多个；本地目录由 group.path 推导）
-- 本地根目录（相对 group.path 会拼到其下）
+- GitLab Group 路径（支持多个；可选为每个 Group 指定本地目录，未指定时由 group.path 推导）
+- 本地根目录（未指定 group.directory 时，相对 group.path 会拼到其下）
 - 默认分支名称
 - 默认并发数
 
@@ -145,11 +145,12 @@ feops config set defaults.branch main
 
 ### 管理 Group
 ```bash
-# 添加 Group（本地目录由 group.path 拼到 defaults.directory 下）
-feops config add-group my-org/frontend -d "前端仓库组"
+# 添加 Group（未指定 --directory 时，本地目录由 group.path 拼到 defaults.directory 下）
+feops config add-group my-org/frontend -d "前端仓库组" --directory /repos/frontend
 
-# 添加另一个 Group
-feops config add-group my-org/mobile -d "移动端仓库组"
+# 多个 Group 可以共用同一个本地目录
+feops config add-group my-org/mobile -d "移动端仓库组" --directory /repos/backend
+feops config add-group my-org/services -d "后端仓库组" --directory /repos/backend
 
 # 移除 Group
 feops config remove-group my-org/frontend
@@ -179,11 +180,18 @@ vim ~/.feops/blacklist.txt
     "groups": [
       {
         "path": "my-org/frontend",
+        "directory": "/repos/frontend",
         "description": "前端仓库组"
       },
       {
         "path": "my-org/mobile",
+        "directory": "/repos/backend",
         "description": "移动端仓库组"
+      },
+      {
+        "path": "my-org/services",
+        "directory": "/repos/backend",
+        "description": "后端仓库组"
       }
     ]
   },
@@ -198,24 +206,24 @@ vim ~/.feops/blacklist.txt
 
 ### 多 Group 目录结构
 
-本地目录由 `group.path` 推导，sync 后目录结构如下（`defaults.directory` 为 `.` 时）：
+未设置 `group.directory` 时，本地目录由 `group.path` 推导。设置后以 `directory` 为准，多个 Group 可以指向同一目录。sync 后目录结构如下：
 
 ```
-my-org/frontend/<repo-name>/
-my-org/mobile/<repo-name>/
+/repos/frontend/<repo-name>/
+/repos/backend/<repo-name>/
 ```
 
-配置的 Group 包含子组时，`sync` 会递归拉取所有子组项目，并镜像 GitLab 的子组目录。例如配置 `my-org/frontend` 后，GitLab 项目 `my-org/frontend/web/admin` 会克隆到：
+配置的 Group 包含子组时，`sync` 会递归拉取所有子组项目，并镜像 GitLab 的子组目录。例如 `directory` 为 `/repos/frontend`、项目为 `my-org/frontend/web/admin` 时，会克隆到：
 
 ```
-my-org/frontend/web/admin/
+/repos/frontend/web/admin/
 ```
 
 **目录解析规则：**
-- `group.path` 为相对路径时，拼接到 `defaults.directory`（与执行时 cwd 无关）
-- `group.path` 为绝对路径时，直接使用该路径（日常仍应配置相对 GitLab Group 路径）
-- `group.directory` 已废弃，加载配置时忽略
-- `sync -d` 临时覆盖本地根目录（相对 path 拼到 `-d` 下；绝对 path 不受影响）
+- 设置了 `group.directory` 且为绝对路径时，直接使用该路径（`sync -d` 不影响）
+- 设置了 `group.directory` 且为相对路径时，拼接到 `defaults.directory`（`sync -d` 时改拼到 `-d`）
+- 未设置 `group.directory` 时：相对 `group.path` 拼接到 `defaults.directory`；绝对 `group.path` 直接使用
+- `sync -d` 临时覆盖本地根目录（仅影响相对 path / 相对 directory；绝对路径不受影响）
 - `branch` / `merged` / `into` / `uptodate` 未指定 `-d` 时，会递归扫描所有 group 目录
 
 ### 黑名单文件格式
@@ -374,7 +382,7 @@ feops init --force
 - `config list [--show-token]`
 - `config set <key> <value>`（支持 gitlab.url/gitlab.token/defaults.*）
 - `config get <key>`
-- `config add-group <path> [-d desc]`
+- `config add-group <path> [-d desc] [--directory dir]`
 - `config remove-group <path>`
 - `config edit-blacklist`
 
@@ -519,6 +527,11 @@ feops upgrade --help
 ## 更新日志
 
 详细的更新日志请查看 [CHANGELOG.md](./CHANGELOG.md)
+
+### v2.3.0 (2026-11-24)
+
+#### 新增
+- ✨ 恢复 `group.directory`，多个 Group 可共用同一本地目录
 
 ### v2.1.0 (2026-07-21)
 

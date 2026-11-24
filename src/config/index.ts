@@ -8,6 +8,8 @@ import * as os from 'os';
 export interface GitLabGroup {
   path: string;
   description?: string;
+  /** 本地目录。绝对路径直接使用；相对路径拼到 defaults.directory。未设置时由 path 推导。 */
+  directory?: string;
 }
 
 /**
@@ -96,12 +98,20 @@ export function loadConfig(): Config {
     const content = fs.readFileSync(configPath, 'utf8');
     const config = JSON.parse(content);
 
-    const groups: GitLabGroup[] = (config.gitlab?.groups || []).map((group: GitLabGroup & { directory?: string }) => {
-      const { directory: _ignored, ...rest } = group;
-      return rest;
+    const groups: GitLabGroup[] = (config.gitlab?.groups || []).map((group: GitLabGroup) => {
+      const normalized: GitLabGroup = { path: group.path };
+      const description = group.description?.trim();
+      if (description) {
+        normalized.description = description;
+      }
+      const directory = group.directory?.trim();
+      if (directory) {
+        normalized.directory = directory;
+      }
+      return normalized;
     });
 
-    // 合并默认配置,确保所有字段都存在；忽略已废弃的 group.directory
+    // 合并默认配置,确保所有字段都存在
     return {
       ...DEFAULT_CONFIG,
       ...config,

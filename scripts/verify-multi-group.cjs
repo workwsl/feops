@@ -122,11 +122,46 @@ assertEqual(
   'sync -d 不影响绝对 group.path'
 );
 
-// 旧配置中的 directory 字段应被忽略（解析只看 path）
 assertEqual(
-  resolveGroupDirectory({ path: 'my-org/frontend', directory: '/ignored' }, defaults),
-  path.resolve(defaults.directory, 'my-org/frontend'),
-  '忽略已废弃的 group.directory 字段'
+  resolveGroupDirectory({ path: 'my-org/frontend', directory: '/repos/frontend' }, defaults),
+  path.resolve('/repos/frontend'),
+  '绝对 group.directory 直接作为本地目录'
+);
+
+assertEqual(
+  resolveGroupDirectory({ path: 'my-org/frontend', directory: '/repos/frontend' }, defaults, '/tmp/custom'),
+  path.resolve('/repos/frontend'),
+  'sync -d 不影响绝对 group.directory'
+);
+
+assertEqual(
+  resolveGroupDirectory({ path: 'my-org/frontend', directory: 'frontend' }, defaults),
+  path.resolve(defaults.directory, 'frontend'),
+  '相对 group.directory 拼接到 defaults.directory'
+);
+
+assertEqual(
+  resolveRepoLocalPath({ path: 'my-org/frontend', directory: '/repos/frontend' }, 'web/admin', defaults),
+  path.resolve('/repos/frontend/web/admin'),
+  'group.directory 下仍镜像子组相对路径'
+);
+
+const sharedConfig = {
+  gitlab: {
+    url: 'http://gitlab.example.com',
+    token: 'test-token',
+    groups: [
+      { path: 'my-org/services', directory: '/repos/backend' },
+      { path: 'my-org/platform', directory: '/repos/backend' }
+    ]
+  },
+  blacklist: [],
+  defaults
+};
+assertEqual(
+  getAllGroupDirectories(sharedConfig).length,
+  1,
+  '多个 Group 可共用同一本地目录'
 );
 
 const allDirs = getAllGroupDirectories(newConfig).sort();

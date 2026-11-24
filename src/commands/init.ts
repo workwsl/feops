@@ -120,18 +120,25 @@ export const initCommand = new Command('init')
 
         console.log(chalk.green(`✅ Group "${groupAnswers.groupPath}" 验证成功`));
 
-        const { description } = await inquirer.prompt([
+        const { description, directory } = await inquirer.prompt([
           {
             type: 'input',
             name: 'description',
             message: 'Group 描述 (可选):',
+            default: ''
+          },
+          {
+            type: 'input',
+            name: 'directory',
+            message: '本地目录 (可选，留空则由 group.path 推导):',
             default: ''
           }
         ]);
 
         groups.push({
           path: groupAnswers.groupPath,
-          description: description || undefined
+          description: description || undefined,
+          directory: directory.trim() || undefined
         });
 
         if (groups.length > 0) {

@@ -188,6 +188,7 @@ configCommand
   .description('添加 GitLab Group')
   .argument('<path>', 'Group 路径 (如: my-org/frontend)')
   .option('-d, --description <desc>', 'Group 描述')
+  .option('--directory <dir>', '本地目录（绝对路径直接使用；相对路径拼到 defaults.directory）')
   .action(async (groupPath: string, options) => {
     if (!configExists()) {
       console.error(chalk.red('❌ 配置文件不存在'));
@@ -218,9 +219,11 @@ configCommand
       console.log(chalk.green(`✅ Group "${groupPath}" 验证成功`));
       
       // 添加 Group
+      const directory = options.directory?.trim();
       const newGroup: GitLabGroup = {
         path: groupPath,
-        description: options.description
+        description: options.description,
+        ...(directory ? { directory } : {})
       };
       
       config.gitlab.groups.push(newGroup);
